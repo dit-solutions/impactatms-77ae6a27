@@ -1,77 +1,56 @@
 
-## Fix Android Build Workflow
 
-The GitHub Actions build is failing because `android/gradle/wrapper/gradle-wrapper.jar` is missing from the repository. The `gradlew` shell script requires this JAR file to run.
+## Fix: Enable Real RFID Hardware Integration
 
-### What We'll Change
-
-We'll update the GitHub Actions workflow to use the official `gradle/actions/setup-gradle` action, which installs Gradle directly on the runner without needing the wrapper JAR.
-
-### File to Modify
-
-**`.github/workflows/android-build.yml`**
-
-Replace the manual gradlew execution with the Gradle action:
-
-1. Add Gradle setup step using `gradle/actions/setup-gradle@v4`
-2. Run `gradle assembleDebug` directly (instead of `./gradlew assembleDebug`)
-3. Remove the "Make Gradle wrapper executable" step (no longer needed)
-
-### Updated Workflow Steps
-
-```text
-+---------------------+
-| Checkout code       |
-+---------------------+
-         |
-+---------------------+
-| Set up Node.js 18   |
-+---------------------+
-         |
-+---------------------+
-| Set up Java 17      |
-+---------------------+
-         |
-+---------------------+
-| Set up Android SDK  |
-+---------------------+
-         |
-+---------------------+
-| Set up Gradle 8.4   |  <-- NEW: Uses gradle/actions/setup-gradle
-+---------------------+
-         |
-+---------------------+
-| npm ci              |
-+---------------------+
-         |
-+---------------------+
-| npm run build       |
-+---------------------+
-         |
-+---------------------+
-| npx cap sync android|
-+---------------------+
-         |
-+---------------------+
-| gradle assembleDebug|  <-- CHANGED: Uses `gradle` directly
-+---------------------+
-         |
-+---------------------+
-| Upload APK artifact |
-+---------------------+
-```
-
-### After Approval
-
-Once this change is pushed to GitHub, the workflow will automatically trigger again. This time it should successfully build your APK since it no longer depends on the missing wrapper JAR.
+The APK is correctly using the native Android plugin (not the web mock), but the native plugin itself contains placeholder/mock code. The actual Mivanta SDK calls are all commented out.
 
 ---
 
-### Technical Details
+### Current Situation
 
-The Gradle action (`gradle/actions/setup-gradle@v4`) will:
-- Install Gradle 8.4 (matching your `gradle-wrapper.properties` version)
-- Add it to the system PATH
-- Enable build caching for faster subsequent builds
+The native Java plugin (`MivantaRfidPlugin.java`) has all real SDK calls commented out:
+- Line 43: `boolean success = true; // Placeholder for development`
+- Line 106: `String epc = "MOCK_EPC_" + System.currentTimeMillis(); // Placeholder`
+- Line 172: `simulateTagReads();` generates fake tags every 2 seconds
 
-This approach is actually more reliable than using the wrapper because it doesn't require committing binary files to your repository.
+---
+
+### What I Will Do
+
+**Uncomment and enable the real Mivanta SDK integration:**
+
+1. **Enable SDK imports** - Uncomment the Mivanta UHF SDK imports at the top of the file
+
+2. **Initialize the UHF Reader** - Uncomment `uhfReader = UHFReader.getInstance()` in the `load()` method
+
+3. **Connect method** - Enable real serial port connection:
+   ```java
+   boolean success = uhfReader.connect("/dev/ttyS4", 115200);
+   ```
+
+4. **Single read method** - Use actual tag inventory:
+   ```java
+   String epc = uhfReader.singleTagInventory();
+   ```
+
+5. **Continuous scanning** - Enable the real inventory listener and start/stop methods
+
+6. **Power control** - Uncomment `uhfReader.setPower(power)`
+
+7. **Remove mock simulation** - Remove the `simulateTagReads()` call and method
+
+---
+
+### After Approval
+
+Once approved, I will:
+1. Update `MivantaRfidPlugin.java` with all real SDK calls enabled
+2. You will need to rebuild the APK via GitHub Actions
+3. Install the new APK on the Mivanta device for testing
+
+---
+
+### Technical Note
+
+The serial port path `/dev/ttyS4` and baud rate `115200` may need adjustment based on the actual Mivanta CX1500N device specifications. If the reader still doesn't connect after the update, we may need to verify these values with the device documentation.
+
