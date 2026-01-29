@@ -11,6 +11,22 @@ export interface RfidTagData {
 }
 
 /**
+ * Complete FASTag data with TID, EPC, and User memory
+ */
+export interface FastTagData {
+  /** Tag Identifier - unique chip ID (24 hex chars from TID bank) */
+  tid: string;
+  /** Electronic Product Code - vehicle identifier (24 hex chars from EPC bank) */
+  epc: string;
+  /** User memory bank data (up to 64 hex chars) */
+  userData: string;
+  /** Signal strength in dBm */
+  rssi?: number;
+  /** Detection timestamp */
+  timestamp: number;
+}
+
+/**
  * Reader status information
  */
 export interface RfidStatus {
@@ -33,7 +49,21 @@ export interface ConnectionResult {
 export interface SingleReadResult {
   success: boolean;
   epc: string;
+  rssi?: number;
   timestamp: number;
+}
+
+/**
+ * Detailed tag read result
+ */
+export interface TagDetailsResult {
+  success: boolean;
+  tid: string;
+  epc: string;
+  userData: string;
+  rssi?: number;
+  timestamp: number;
+  message?: string;
 }
 
 /**
@@ -71,6 +101,12 @@ export interface MivantaRfidPlugin {
    * Perform a single tag read (button-triggered)
    */
   readSingle(): Promise<SingleReadResult>;
+  
+  /**
+   * Read complete FASTag data including TID, EPC, and User memory
+   * This performs inventory + reads from TID, EPC, and User memory banks
+   */
+  readTagDetails(): Promise<TagDetailsResult>;
   
   /**
    * Start continuous inventory scanning

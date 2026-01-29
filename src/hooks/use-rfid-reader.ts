@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { rfidService, RfidTagData, RfidStatus, RfidReadMode } from '@/services/rfid';
+import { rfidService, RfidTagData, RfidStatus, RfidReadMode, FastTagData } from '@/services/rfid';
 import { toast } from '@/hooks/use-toast';
 
 interface UseRfidReaderReturn {
@@ -11,12 +11,15 @@ interface UseRfidReaderReturn {
   
   // Tag data
   lastTag: RfidTagData | null;
+  lastFastTag: FastTagData | null;
   tagHistory: RfidTagData[];
+  fastTagHistory: FastTagData[];
   
   // Actions
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   readSingle: () => Promise<void>;
+  readTagDetails: () => Promise<FastTagData | null>;
   startContinuous: () => Promise<void>;
   stopContinuous: () => Promise<void>;
   setPower: (power: number) => Promise<void>;
@@ -36,7 +39,9 @@ export function useRfidReader(
   const [power, setPowerState] = useState(30);
   const [mode, setMode] = useState<RfidReadMode>('single');
   const [lastTag, setLastTag] = useState<RfidTagData | null>(null);
+  const [lastFastTag, setLastFastTag] = useState<FastTagData | null>(null);
   const [tagHistory, setTagHistory] = useState<RfidTagData[]>([]);
+  const [fastTagHistory, setFastTagHistory] = useState<FastTagData[]>([]);
 
   // Set up service callbacks
   useEffect(() => {
@@ -99,6 +104,25 @@ export function useRfidReader(
     }
   }, []);
 
+  const readTagDetails = useCallback(async (): Promise<FastTagData | null> => {
+    const fastTag = await rfidService.readTagDetails();
+    if (fastTag) {
+      setLastFastTag(fastTag);
+      setFastTagHistory(prev => [fastTag, ...prev].slice(0, 100));
+      toast({
+        title: 'FASTag Read',
+        description: `TID: ${fastTag.tid.substring(0, 12)}...`
+      });
+    } else {
+      toast({
+        title: 'No Tag Found',
+        description: 'No FASTag detected. Try again.',
+        variant: 'destructive'
+      });
+    }
+    return fastTag;
+  }, []);
+
   const startContinuous = useCallback(async () => {
     await rfidService.startContinuous();
   }, []);
@@ -116,7 +140,9 @@ export function useRfidReader(
 
   const clearHistory = useCallback(() => {
     setTagHistory([]);
+    setFastTagHistory([]);
     setLastTag(null);
+    setLastFastTag(null);
   }, []);
 
   return {
@@ -125,10 +151,13 @@ export function useRfidReader(
     power,
     mode,
     lastTag,
+    lastFastTag,
     tagHistory,
+    fastTagHistory,
     connect,
     disconnect,
     readSingle,
+    readTagDetails,
     startContinuous,
     stopContinuous,
     setPower,

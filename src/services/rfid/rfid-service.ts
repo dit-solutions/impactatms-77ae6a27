@@ -1,4 +1,4 @@
-import MivantaRfid, { RfidTagData, RfidStatus } from './mivanta-rfid-plugin';
+import MivantaRfid, { RfidTagData, RfidStatus, FastTagData } from './mivanta-rfid-plugin';
 
 export type RfidReadMode = 'single' | 'continuous';
 
@@ -116,6 +116,7 @@ class RfidService {
       const result = await MivantaRfid.readSingle();
       const tagData: RfidTagData = {
         epc: result.epc,
+        rssi: result.rssi,
         timestamp: result.timestamp
       };
       
@@ -128,6 +129,44 @@ class RfidService {
       const err = error instanceof Error ? error : new Error(String(error));
       this.callbacks.onError?.(err);
       console.error('RFID Service: Single read failed', error);
+      return null;
+    }
+  }
+
+  /**
+   * Read complete FASTag details including TID, EPC, and User memory
+   * @returns FastTagData with all memory bank contents
+   */
+  async readTagDetails(): Promise<FastTagData | null> {
+    if (!this.status.connected) {
+      this.callbacks.onError?.(new Error('Reader not connected'));
+      return null;
+    }
+
+    try {
+      const result = await MivantaRfid.readTagDetails();
+      
+      if (!result.success) {
+        console.log('RFID Service: No tag detected for detailed read');
+        return null;
+      }
+      
+      const fastTagData: FastTagData = {
+        tid: result.tid,
+        epc: result.epc,
+        userData: result.userData,
+        rssi: result.rssi,
+        timestamp: result.timestamp
+      };
+      
+      console.log('RFID Service: Tag details read -', 
+        `TID: ${result.tid}, EPC: ${result.epc}, User: ${result.userData}`);
+      
+      return fastTagData;
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.callbacks.onError?.(err);
+      console.error('RFID Service: Read tag details failed', error);
       return null;
     }
   }
@@ -231,4 +270,4 @@ export const rfidService = RfidService.getInstance();
 export default rfidService;
 
 // Re-export types
-export type { RfidTagData, RfidStatus };
+export type { RfidTagData, RfidStatus, FastTagData };
