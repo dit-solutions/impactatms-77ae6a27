@@ -117,9 +117,9 @@ public class MivantaRfidPlugin extends Plugin {
                 return;
             }
             
-            Log.d(TAG, "Calling uhfReader.connect(context)...");
-            // Connect using Android Context
-            UHFReaderResult<Boolean> result = uhfReader.connect(getContext());
+            Log.d(TAG, "Calling uhfReader.connect()...");
+            // Connect to the UHF reader (v1.1.0 API takes no arguments)
+            UHFReaderResult<Boolean> result = uhfReader.connect();
 
             if (result == null) {
                 Log.e(TAG, "uhfReader.connect(...) returned null result");
