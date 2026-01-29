@@ -18,6 +18,7 @@ import java.lang.reflect.Method;
 /**
  * Mivanta RFID Plugin for Capacitor
  * Bridges the web app to the native Mivanta UHF RFID hardware SDK
+ * For Impact ATMS
  */
 @CapacitorPlugin(name = "MivantaRfid")
 public class MivantaRfidPlugin extends Plugin {
@@ -25,18 +26,20 @@ public class MivantaRfidPlugin extends Plugin {
     private static final String TAG = "MivantaRfidPlugin";
     
     // Memory bank constants (standard UHF Gen2)
-    private static final int MEMBANK_RESERVED = 0;  // Kill/Access passwords
-    private static final int MEMBANK_EPC = 1;       // EPC memory
-    private static final int MEMBANK_TID = 2;       // TID memory
-    private static final int MEMBANK_USER = 3;      // User memory
+    private static final int MEMBANK_RESERVED = 0;
+    private static final int MEMBANK_EPC = 1;
+    private static final int MEMBANK_TID = 2;
+    private static final int MEMBANK_USER = 3;
     
-    // Default access password (no password)
+    // Default access password
     private static final String DEFAULT_PASSWORD = "00000000";
     
     // Hardware trigger button key codes (common for handheld scanners)
-    private static final int KEYCODE_SCAN_TRIGGER = 280;  // Common scan trigger keycode
-    private static final int KEYCODE_SCAN_TRIGGER_ALT = 139;  // F7 key often used as trigger
-    private static final int KEYCODE_SCAN_TRIGGER_ALT2 = 293;  // Another common trigger
+    private static final int KEYCODE_SCAN_TRIGGER = 280;
+    private static final int KEYCODE_SCAN_TRIGGER_ALT = 139;
+    private static final int KEYCODE_SCAN_TRIGGER_ALT2 = 293;
+    private static final int KEYCODE_SCAN_LEFT = 520;
+    private static final int KEYCODE_SCAN_RIGHT = 521;
     
     private UHFReader uhfReader;
     private boolean isConnected = false;
@@ -45,19 +48,16 @@ public class MivantaRfidPlugin extends Plugin {
     private boolean sdkAvailable = false;
     private static boolean nativeLibsLoaded = false;
     
-    // Track current read mode for button behavior
-    private String currentMode = "single"; // "single" or "continuous"
+    // Track current read mode
+    private String currentMode = "single";
+    private boolean continuousModeStartedByTrigger = false;
 
-    /**
-     * Explicitly load native libraries required by the Mivanta SDK.
-     */
     private static synchronized void loadNativeLibraries() {
         if (nativeLibsLoaded) {
             return;
         }
         
         String[] libraries = {"power", "SerialPortHc", "ModuleAPI"};
-        boolean allLoaded = true;
         
         for (String lib : libraries) {
             try {
@@ -68,26 +68,19 @@ public class MivantaRfidPlugin extends Plugin {
                 Log.w(TAG, "Could not load " + lib + " (may be bundled in AAR): " + e.getMessage());
             } catch (Throwable t) {
                 Log.e(TAG, "Error loading " + lib + ": " + t.getMessage(), t);
-                allLoaded = false;
             }
         }
         
         nativeLibsLoaded = true;
-        Log.d(TAG, "Native library loading completed (allExplicitlyLoaded=" + allLoaded + ")");
+        Log.d(TAG, "Native library loading completed");
     }
 
     @Override
     public void load() {
         super.load();
-        Log.d(TAG, "MivantaRfidPlugin loaded - attempting to initialize UHF Reader");
+        Log.d(TAG, "MivantaRfidPlugin loaded - initializing UHF Reader");
         
         loadNativeLibraries();
-        
-        if (!nativeLibsLoaded) {
-            Log.e(TAG, "Native libraries not loaded - SDK will not be available");
-            sdkAvailable = false;
-            return;
-        }
         
         try {
             uhfReader = UHFReader.getInstance();
@@ -98,18 +91,12 @@ public class MivantaRfidPlugin extends Plugin {
             } else {
                 Log.w(TAG, "UHFReader.getInstance() returned null");
             }
-        } catch (UnsatisfiedLinkError e) {
-            Log.e(TAG, "Native library load failed during getInstance: " + e.getMessage(), e);
-            sdkAvailable = false;
         } catch (Throwable t) {
             Log.e(TAG, "Failed to get UHFReader instance: " + t.getMessage(), t);
             sdkAvailable = false;
         }
     }
     
-    /**
-     * Log available methods on UHFReader for debugging SDK API
-     */
     private void logAvailableMethods() {
         try {
             Method[] methods = UHFReader.class.getDeclaredMethods();
@@ -131,26 +118,26 @@ public class MivantaRfidPlugin extends Plugin {
     
     /**
      * Handle hardware key events (scan trigger button)
+     * This is called from MainActivity
      */
     public boolean handleKeyDown(int keyCode, KeyEvent event) {
-        Log.d(TAG, "Key down: " + keyCode);
+        Log.d(TAG, "Key down: " + keyCode + " (connected=" + isConnected + ", mode=" + currentMode + ")");
         
-        if (keyCode == KEYCODE_SCAN_TRIGGER || 
-            keyCode == KEYCODE_SCAN_TRIGGER_ALT || 
-            keyCode == KEYCODE_SCAN_TRIGGER_ALT2 ||
-            keyCode == KeyEvent.KEYCODE_F7 ||
-            keyCode == KeyEvent.KEYCODE_F8) {
+        if (isTriggerKey(keyCode) && isConnected) {
+            Log.d(TAG, "Trigger button pressed - performing scan action");
             
-            if (isConnected) {
-                // Notify web app of trigger press
-                JSObject data = new JSObject();
-                data.put("action", "trigger_pressed");
-                data.put("mode", currentMode);
-                data.put("isScanning", isScanning);
-                notifyListeners("triggerPressed", data);
-                Log.d(TAG, "Trigger button pressed, mode: " + currentMode);
-                return true;
-            }
+            // Notify web app
+            JSObject data = new JSObject();
+            data.put("action", "trigger_pressed");
+            data.put("mode", currentMode);
+            data.put("isScanning", isScanning);
+            data.put("keyCode", keyCode);
+            notifyListeners("triggerPressed", data);
+            
+            // Also directly perform scan based on mode
+            performTriggerScan();
+            
+            return true;
         }
         return false;
     }
@@ -158,41 +145,158 @@ public class MivantaRfidPlugin extends Plugin {
     public boolean handleKeyUp(int keyCode, KeyEvent event) {
         Log.d(TAG, "Key up: " + keyCode);
         
-        if (keyCode == KEYCODE_SCAN_TRIGGER || 
-            keyCode == KEYCODE_SCAN_TRIGGER_ALT || 
-            keyCode == KEYCODE_SCAN_TRIGGER_ALT2 ||
-            keyCode == KeyEvent.KEYCODE_F7 ||
-            keyCode == KeyEvent.KEYCODE_F8) {
-            
-            if (isConnected) {
-                JSObject data = new JSObject();
-                data.put("action", "trigger_released");
-                data.put("mode", currentMode);
-                notifyListeners("triggerReleased", data);
-                Log.d(TAG, "Trigger button released");
-                return true;
-            }
+        if (isTriggerKey(keyCode) && isConnected) {
+            JSObject data = new JSObject();
+            data.put("action", "trigger_released");
+            data.put("mode", currentMode);
+            notifyListeners("triggerReleased", data);
+            return true;
         }
         return false;
     }
     
+    private boolean isTriggerKey(int keyCode) {
+        return keyCode == KEYCODE_SCAN_TRIGGER || 
+               keyCode == KEYCODE_SCAN_TRIGGER_ALT || 
+               keyCode == KEYCODE_SCAN_TRIGGER_ALT2 ||
+               keyCode == KEYCODE_SCAN_LEFT ||
+               keyCode == KEYCODE_SCAN_RIGHT ||
+               keyCode == KeyEvent.KEYCODE_F7 ||
+               keyCode == KeyEvent.KEYCODE_F8 ||
+               keyCode == KeyEvent.KEYCODE_CAMERA ||
+               keyCode == KeyEvent.KEYCODE_FOCUS;
+    }
+    
     /**
-     * Set the current read mode (called from web app)
+     * Perform scan action when physical trigger is pressed
      */
+    private void performTriggerScan() {
+        if (!isConnected || uhfReader == null) {
+            Log.w(TAG, "Cannot scan - not connected");
+            return;
+        }
+        
+        new Thread(() -> {
+            try {
+                if (currentMode.equals("continuous")) {
+                    // Continuous mode: start scanning if not already
+                    if (!isScanning) {
+                        startContinuousInternal();
+                        continuousModeStartedByTrigger = true;
+                    }
+                } else {
+                    // Single mode: perform single read with details
+                    performSingleScanInternal();
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Trigger scan error: " + e.getMessage(), e);
+            }
+        }).start();
+    }
+    
+    /**
+     * Internal method to perform single scan and emit result
+     */
+    private void performSingleScanInternal() {
+        try {
+            UHFReaderResult<UHFTagEntity> result = uhfReader.singleTagInventory();
+            
+            if (result != null && result.getData() != null) {
+                UHFTagEntity tag = result.getData();
+                String epc = tag.getEcpHex();
+                int rssi = tag.getRssi();
+                
+                // Try to read all memory banks
+                String tid = tryReadMemoryBankDirect(MEMBANK_TID, 0, 6, epc);
+                String userData = tryReadMemoryBankDirect(MEMBANK_USER, 0, 32, epc);
+                
+                if (userData.isEmpty()) {
+                    userData = tryReadMemoryBankDirect(MEMBANK_USER, 0, 16, epc);
+                }
+                
+                // Create FASTag data object
+                JSObject fastTagData = new JSObject();
+                fastTagData.put("success", true);
+                fastTagData.put("tid", tid);
+                fastTagData.put("epc", epc != null ? epc : "");
+                fastTagData.put("userData", userData);
+                fastTagData.put("rssi", rssi);
+                fastTagData.put("timestamp", System.currentTimeMillis());
+                
+                // Notify via trigger-specific event
+                notifyListeners("triggerScanResult", fastTagData);
+                
+                Log.d(TAG, "Trigger scan complete: EPC=" + epc + ", TID=" + tid);
+            } else {
+                JSObject noTag = new JSObject();
+                noTag.put("success", false);
+                noTag.put("message", "No tag detected");
+                noTag.put("timestamp", System.currentTimeMillis());
+                notifyListeners("triggerScanResult", noTag);
+                Log.d(TAG, "Trigger scan: no tag detected");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "performSingleScanInternal error: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Internal method to start continuous scanning
+     */
+    private void startContinuousInternal() {
+        try {
+            uhfReader.setOnInventoryDataListener(new OnInventoryDataListener() {
+                @Override
+                public void onInventoryData(List<UHFTagEntity> tags) {
+                    if (tags != null) {
+                        for (UHFTagEntity tag : tags) {
+                            if (tag != null) {
+                                JSObject tagData = new JSObject();
+                                tagData.put("epc", tag.getEcpHex());
+                                tagData.put("rssi", tag.getRssi());
+                                tagData.put("count", tag.getCount());
+                                tagData.put("timestamp", System.currentTimeMillis());
+                                notifyListeners("tagDetected", tagData);
+                            }
+                        }
+                    }
+                }
+            });
+            
+            UHFReaderResult<Boolean> result = uhfReader.startInventory();
+            Boolean started = result.getData();
+            
+            if (started != null && started) {
+                isScanning = true;
+                Log.d(TAG, "Continuous scanning started via trigger");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "startContinuousInternal error: " + e.getMessage(), e);
+        }
+    }
+    
     @PluginMethod
     public void setMode(PluginCall call) {
         String mode = call.getString("mode", "single");
         currentMode = mode;
         Log.d(TAG, "Mode set to: " + mode);
         
+        // If switching to single mode and was scanning, stop
+        if (mode.equals("single") && isScanning) {
+            try {
+                uhfReader.stopInventory();
+                isScanning = false;
+                Log.d(TAG, "Stopped scanning due to mode switch to single");
+            } catch (Exception e) {
+                Log.w(TAG, "Error stopping inventory on mode switch: " + e.getMessage());
+            }
+        }
+        
         JSObject response = new JSObject();
         response.put("mode", mode);
         call.resolve(response);
     }
     
-    /**
-     * Get debug information including SDK methods
-     */
     @PluginMethod
     public void getDebugInfo(PluginCall call) {
         JSObject response = new JSObject();
@@ -224,7 +328,6 @@ public class MivantaRfidPlugin extends Plugin {
         
         response.put("methods", methodsList.toString());
         call.resolve(response);
-        Log.d(TAG, "getDebugInfo called - returning SDK methods");
     }
 
     @PluginMethod
@@ -232,93 +335,71 @@ public class MivantaRfidPlugin extends Plugin {
         Log.d(TAG, "connect() called, sdkAvailable=" + sdkAvailable);
         
         if (!sdkAvailable) {
-            Log.e(TAG, "SDK not available - native libraries may have failed to load");
-            call.reject("RFID SDK not available. Native libraries may not be compatible with this device.");
+            call.reject("RFID SDK not available");
             return;
         }
         
         new Thread(() -> {
             try {
                 if (uhfReader == null) {
-                    Log.d(TAG, "uhfReader is null, calling getInstance()");
                     uhfReader = UHFReader.getInstance();
                 }
 
                 if (uhfReader == null) {
-                    Log.e(TAG, "UHFReader.getInstance() returned null");
                     getActivity().runOnUiThread(() -> 
-                        call.reject("UHF reader not available (getInstance returned null)")
+                        call.reject("UHF reader not available")
                     );
                     return;
                 }
                 
-                int maxRetries = 3;
-                int retryDelayMs = 500;
                 boolean connected = false;
                 String lastError = "Unknown error";
                 
-                for (int attempt = 1; attempt <= maxRetries && !connected; attempt++) {
-                    Log.d(TAG, "Connection attempt " + attempt + "/" + maxRetries);
+                for (int attempt = 1; attempt <= 3 && !connected; attempt++) {
+                    Log.d(TAG, "Connection attempt " + attempt);
                     
                     if (attempt == 1) {
-                        try {
-                            Thread.sleep(200);
-                        } catch (InterruptedException ignored) {}
+                        try { Thread.sleep(200); } catch (InterruptedException ignored) {}
                     }
                     
                     UHFReaderResult<Boolean> result = uhfReader.connect();
                     
-                    if (result == null) {
-                        lastError = "null result from SDK";
-                        Log.w(TAG, "Attempt " + attempt + ": connect() returned null");
-                    } else {
+                    if (result != null) {
                         Boolean success = result.getData();
                         if (success != null && success) {
                             connected = true;
-                            Log.d(TAG, "Connected successfully on attempt " + attempt);
                         } else {
                             lastError = result.getMessage() != null ? result.getMessage() : "null";
-                            Log.w(TAG, "Attempt " + attempt + " failed: " + lastError);
                         }
                     }
                     
-                    if (!connected && attempt < maxRetries) {
-                        try {
-                            Thread.sleep(retryDelayMs);
-                            retryDelayMs *= 1.5;
-                        } catch (InterruptedException ignored) {}
+                    if (!connected && attempt < 3) {
+                        try { Thread.sleep(500); } catch (InterruptedException ignored) {}
                     }
                 }
                 
                 if (connected) {
                     isConnected = true;
-
+                    
                     try {
-                        UHFReaderResult<Boolean> powerResult = uhfReader.setPower(currentPower);
-                        if (powerResult == null) {
-                            Log.w(TAG, "setPower returned null result");
-                        } else {
-                            Log.d(TAG, "setPower(" + currentPower + ") => code=" + powerResult.getResultCode() + ", msg=" + powerResult.getMessage());
-                        }
+                        uhfReader.setPower(currentPower);
                     } catch (Throwable t) {
-                        Log.e(TAG, "setPower threw: " + t.getMessage(), t);
+                        Log.e(TAG, "setPower error: " + t.getMessage());
                     }
                     
                     JSObject response = new JSObject();
                     response.put("connected", true);
-                    response.put("message", "UHF Reader connected successfully");
-                    
+                    response.put("message", "RFID Reader connected");
                     getActivity().runOnUiThread(() -> call.resolve(response));
-                    Log.d(TAG, "UHF Reader connected");
+                    Log.d(TAG, "RFID Reader connected");
                 } else {
-                    Log.e(TAG, "All connection attempts failed. Last error: " + lastError);
                     final String errorMsg = lastError;
                     getActivity().runOnUiThread(() -> 
-                        call.reject("Failed to connect to UHF Reader after 3 attempts: " + errorMsg)
+                        call.reject("Failed to connect: " + errorMsg)
                     );
                 }
             } catch (Throwable t) {
-                Log.e(TAG, "Connection fatal error: " + t.getMessage(), t);
+                Log.e(TAG, "Connection error: " + t.getMessage(), t);
                 final String msg = t.getMessage();
                 getActivity().runOnUiThread(() -> call.reject("Connection error: " + msg));
             }
@@ -334,17 +415,15 @@ public class MivantaRfidPlugin extends Plugin {
             }
             
             if (uhfReader != null) {
-                UHFReaderResult<Boolean> result = uhfReader.disConnect();
-                Log.d(TAG, "Disconnect result: " + result.getMessage());
+                uhfReader.disConnect();
             }
             isConnected = false;
             
             JSObject response = new JSObject();
             response.put("connected", false);
-            response.put("message", "UHF Reader disconnected");
+            response.put("message", "RFID Reader disconnected");
             call.resolve(response);
-            
-            Log.d(TAG, "UHF Reader disconnected");
+            Log.d(TAG, "RFID Reader disconnected");
         } catch (Exception e) {
             Log.e(TAG, "Disconnect error: " + e.getMessage(), e);
             call.reject("Disconnect error: " + e.getMessage());
@@ -354,69 +433,46 @@ public class MivantaRfidPlugin extends Plugin {
     @PluginMethod
     public void readSingle(PluginCall call) {
         if (!isConnected || uhfReader == null) {
-            call.reject("Reader not connected. Please connect first.");
+            call.reject("Reader not connected");
             return;
         }
 
         try {
             UHFReaderResult<UHFTagEntity> result = uhfReader.singleTagInventory();
             
-            if (result == null) {
+            if (result == null || result.getData() == null) {
                 JSObject response = new JSObject();
                 response.put("success", false);
                 response.put("epc", "");
                 response.put("timestamp", System.currentTimeMillis());
                 call.resolve(response);
-                Log.d(TAG, "Single read: null result");
                 return;
             }
             
             UHFTagEntity tag = result.getData();
             
-            if (tag != null) {
-                String epc = tag.getEcpHex();
-                
-                JSObject response = new JSObject();
-                response.put("success", true);
-                response.put("epc", epc != null ? epc : "");
-                response.put("rssi", tag.getRssi());
-                response.put("timestamp", System.currentTimeMillis());
-                call.resolve(response);
-                
-                Log.d(TAG, "Single read: " + epc);
-            } else {
-                JSObject response = new JSObject();
-                response.put("success", false);
-                response.put("epc", "");
-                response.put("timestamp", System.currentTimeMillis());
-                call.resolve(response);
-                
-                Log.d(TAG, "Single read: No tag detected");
-            }
+            JSObject response = new JSObject();
+            response.put("success", true);
+            response.put("epc", tag.getEcpHex() != null ? tag.getEcpHex() : "");
+            response.put("rssi", tag.getRssi());
+            response.put("timestamp", System.currentTimeMillis());
+            call.resolve(response);
+            
+            Log.d(TAG, "Single read: " + tag.getEcpHex());
         } catch (Exception e) {
             Log.e(TAG, "Single read error: " + e.getMessage(), e);
             call.reject("Read error: " + e.getMessage());
         }
     }
 
-    /**
-     * Read complete FASTag details including TID, EPC, and User memory banks.
-     * 
-     * Based on user's live app format:
-     * Raw data: "3416 1FA8 2032 8EE8 1119 7D00 E280 1105 2000 775D 0E46 0A69 58585858..."
-     * - First 24 hex digits = TID (e.g., "34161FA820328EE811197D00")
-     * - Data starting with 'E' = EPC (e.g., "E28011052000775D0E460A69")
-     * - Remaining data = User Data
-     */
     @PluginMethod
     public void readTagDetails(PluginCall call) {
         if (!isConnected || uhfReader == null) {
-            call.reject("Reader not connected. Please connect first.");
+            call.reject("Reader not connected");
             return;
         }
 
         try {
-            // Step 1: Perform single tag inventory to get raw data
             UHFReaderResult<UHFTagEntity> inventoryResult = uhfReader.singleTagInventory();
             
             if (inventoryResult == null || inventoryResult.getData() == null) {
@@ -425,7 +481,6 @@ public class MivantaRfidPlugin extends Plugin {
                 response.put("message", "No tag detected");
                 response.put("timestamp", System.currentTimeMillis());
                 call.resolve(response);
-                Log.d(TAG, "readTagDetails: No tag detected during inventory");
                 return;
             }
             
@@ -433,59 +488,39 @@ public class MivantaRfidPlugin extends Plugin {
             String epcFromInventory = tag.getEcpHex();
             int rssi = tag.getRssi();
             
-            Log.d(TAG, "readTagDetails: Tag found with EPC: " + epcFromInventory + ", RSSI: " + rssi);
+            Log.d(TAG, "readTagDetails: Tag found - EPC: " + epcFromInventory + ", RSSI: " + rssi);
             
-            // Initialize parsed data
-            String tid = "";
-            String epc = epcFromInventory != null ? epcFromInventory : "";
-            String userData = "";
-            
-            // Try to read TID memory bank (bank 2)
-            Log.d(TAG, "Attempting to read TID bank...");
-            tid = tryReadMemoryBankDirect(MEMBANK_TID, 0, 6, epcFromInventory);
+            // Read TID
+            String tid = tryReadMemoryBankDirect(MEMBANK_TID, 0, 6, epcFromInventory);
             Log.d(TAG, "TID read result: '" + tid + "'");
             
-            // Try to read User memory bank (bank 3)
-            Log.d(TAG, "Attempting to read User bank...");
-            userData = tryReadMemoryBankDirect(MEMBANK_USER, 0, 32, epcFromInventory);
-            Log.d(TAG, "User data read result: '" + userData + "'");
-            
+            // Read User data with multiple size attempts
+            String userData = tryReadMemoryBankDirect(MEMBANK_USER, 0, 32, epcFromInventory);
             if (userData.isEmpty()) {
                 userData = tryReadMemoryBankDirect(MEMBANK_USER, 0, 16, epcFromInventory);
             }
             if (userData.isEmpty()) {
                 userData = tryReadMemoryBankDirect(MEMBANK_USER, 0, 8, epcFromInventory);
             }
+            Log.d(TAG, "User data read result: '" + userData + "'");
             
-            // Build response
             JSObject response = new JSObject();
             response.put("success", true);
             response.put("tid", tid != null ? tid : "");
-            response.put("epc", epc);
+            response.put("epc", epcFromInventory != null ? epcFromInventory : "");
             response.put("userData", userData != null ? userData : "");
             response.put("rssi", rssi);
             response.put("timestamp", System.currentTimeMillis());
             
-            String debugMsg = "";
-            if ((tid == null || tid.isEmpty()) && (userData == null || userData.isEmpty())) {
-                debugMsg = "EPC only - TID/User banks may need different SDK method";
-            }
-            response.put("message", debugMsg);
-            
             call.resolve(response);
-            Log.d(TAG, "readTagDetails: Complete - TID=" + tid + ", EPC=" + epc + ", User=" + userData);
+            Log.d(TAG, "readTagDetails complete: TID=" + tid + ", EPC=" + epcFromInventory);
             
         } catch (Exception e) {
             Log.e(TAG, "readTagDetails error: " + e.getMessage(), e);
-            call.reject("Read tag details error: " + e.getMessage());
+            call.reject("Read error: " + e.getMessage());
         }
     }
     
-    /**
-     * Parse raw reader data in the format from user's live app.
-     * Input: "3416 1FA8 2032 8EE8 1119 7D00 E280 1105 2000 775D 0E46 0A69 58585858..."
-     * Returns: JSObject with tid, epc, userData parsed out
-     */
     @PluginMethod
     public void parseRawReaderData(PluginCall call) {
         String rawData = call.getString("rawData", "");
@@ -499,32 +534,21 @@ public class MivantaRfidPlugin extends Plugin {
         call.resolve(result);
     }
     
-    /**
-     * Parse the raw data string into TID, EPC, and User Data components.
-     * Format: First 24 hex chars = TID, data starting with 'E' = EPC, rest = User Data
-     */
     private JSObject parseReaderDataString(String rawData) {
-        // Remove all spaces and convert to uppercase
         String cleanData = rawData.replaceAll("\\s+", "").toUpperCase();
         
-        Log.d(TAG, "parseReaderDataString input: " + cleanData + " (length: " + cleanData.length() + ")");
+        Log.d(TAG, "parseReaderDataString: " + cleanData + " (length: " + cleanData.length() + ")");
         
         String tid = "";
         String epc = "";
         String userData = "";
         
         if (cleanData.length() >= 24) {
-            // First 24 hex characters are TID
             tid = cleanData.substring(0, 24);
             String remaining = cleanData.substring(24);
             
-            Log.d(TAG, "TID extracted: " + tid);
-            Log.d(TAG, "Remaining after TID: " + remaining);
-            
-            // Find EPC - starts with 'E' 
             int epcStart = remaining.indexOf('E');
             if (epcStart >= 0) {
-                // EPC is typically 24 hex chars (96 bits)
                 String fromE = remaining.substring(epcStart);
                 if (fromE.length() >= 24) {
                     epc = fromE.substring(0, 24);
@@ -532,16 +556,10 @@ public class MivantaRfidPlugin extends Plugin {
                 } else {
                     epc = fromE;
                 }
-                
-                Log.d(TAG, "EPC extracted: " + epc);
-                Log.d(TAG, "User data extracted: " + userData);
             } else {
-                // No 'E' found, treat remaining as user data
                 userData = remaining;
-                Log.d(TAG, "No EPC marker found, all remaining is user data");
             }
         } else {
-            // Short data - might just be EPC
             if (cleanData.startsWith("E")) {
                 epc = cleanData;
             } else {
@@ -558,23 +576,18 @@ public class MivantaRfidPlugin extends Plugin {
         return result;
     }
     
-    /**
-     * Try to read a memory bank using direct SDK method calls
-     */
     private String tryReadMemoryBankDirect(int memBank, int startAddr, int wordCount, String epc) {
         String result = "";
         
-        Log.d(TAG, "tryReadMemoryBankDirect: bank=" + memBank + ", startAddr=" + startAddr + ", wordCount=" + wordCount);
+        Log.d(TAG, "tryReadMemoryBankDirect: bank=" + memBank + ", addr=" + startAddr + ", words=" + wordCount);
         
         result = tryDirectReadMethod(memBank, startAddr, wordCount, epc);
         if (result != null && !result.isEmpty()) {
-            Log.d(TAG, "Direct read succeeded for bank " + memBank + ": " + result);
             return result;
         }
         
         result = tryReadWithReflectionDiscovery(memBank, startAddr, wordCount, epc);
         if (result != null && !result.isEmpty()) {
-            Log.d(TAG, "Reflection discovery read succeeded for bank " + memBank + ": " + result);
             return result;
         }
         
@@ -582,9 +595,6 @@ public class MivantaRfidPlugin extends Plugin {
         return "";
     }
     
-    /**
-     * Try direct SDK readData method with various parameter orderings
-     */
     private String tryDirectReadMethod(int memBank, int startAddr, int wordCount, String epc) {
         try {
             Method[] methods = UHFReader.class.getDeclaredMethods();
@@ -595,104 +605,67 @@ public class MivantaRfidPlugin extends Plugin {
                 if (name.toLowerCase().contains("power") || name.toLowerCase().contains("rssi")) continue;
                 
                 Class<?>[] paramTypes = method.getParameterTypes();
-                int paramCount = paramTypes.length;
-                
-                Log.d(TAG, "Checking method: " + name + " with " + paramCount + " params");
-                
                 Object readResult = null;
                 
                 try {
-                    // Pattern 1: readData(String password, int bank, int addr, int len)
-                    if (paramCount == 4 && 
+                    if (paramTypes.length == 4 && 
                         paramTypes[0] == String.class &&
-                        paramTypes[1] == int.class &&
-                        paramTypes[2] == int.class &&
-                        paramTypes[3] == int.class) {
-                        Log.d(TAG, "Trying " + name + "(password, bank, addr, len)");
+                        paramTypes[1] == int.class) {
                         readResult = method.invoke(uhfReader, DEFAULT_PASSWORD, memBank, startAddr, wordCount);
                     }
-                    // Pattern 2: readData(int bank, int addr, int len, String password)
-                    else if (paramCount == 4 &&
+                    else if (paramTypes.length == 4 &&
                              paramTypes[0] == int.class &&
-                             paramTypes[1] == int.class &&
-                             paramTypes[2] == int.class &&
                              paramTypes[3] == String.class) {
-                        Log.d(TAG, "Trying " + name + "(bank, addr, len, password)");
                         readResult = method.invoke(uhfReader, memBank, startAddr, wordCount, DEFAULT_PASSWORD);
                     }
-                    // Pattern 3: readData(String password, int bank, int addr, int len, String epc)
-                    else if (paramCount == 5 &&
+                    else if (paramTypes.length == 5 &&
                              paramTypes[0] == String.class &&
                              paramTypes[4] == String.class) {
-                        Log.d(TAG, "Trying " + name + "(password, bank, addr, len, epc)");
                         readResult = method.invoke(uhfReader, DEFAULT_PASSWORD, memBank, startAddr, wordCount, epc);
                     }
-                    // Pattern 4: readData(String epc, String password, int bank, int addr, int len)
-                    else if (paramCount == 5 &&
+                    else if (paramTypes.length == 5 &&
                              paramTypes[0] == String.class &&
                              paramTypes[1] == String.class) {
-                        Log.d(TAG, "Trying " + name + "(epc, password, bank, addr, len)");
                         readResult = method.invoke(uhfReader, epc, DEFAULT_PASSWORD, memBank, startAddr, wordCount);
                     }
-                    // Pattern 5: readMemory/readTag style methods (3 params: bank, addr, len)
-                    else if (paramCount == 3 &&
-                             paramTypes[0] == int.class &&
-                             paramTypes[1] == int.class &&
-                             paramTypes[2] == int.class) {
-                        Log.d(TAG, "Trying " + name + "(bank, addr, len)");
+                    else if (paramTypes.length == 3 &&
+                             paramTypes[0] == int.class) {
                         readResult = method.invoke(uhfReader, memBank, startAddr, wordCount);
                     }
                 } catch (Exception e) {
-                    Log.w(TAG, "Method " + name + " invoke failed: " + e.getMessage());
                     continue;
                 }
                 
                 if (readResult != null) {
-                    Log.d(TAG, "Method " + name + " returned: " + readResult.getClass().getSimpleName());
                     String hex = extractHexFromResult(readResult);
                     if (hex != null && !hex.isEmpty() && !hex.equals("00000000") && !hex.matches("^0+$")) {
-                        Log.d(TAG, "Valid data from " + name + ": " + hex);
+                        Log.d(TAG, "Read success via " + name + ": " + hex);
                         return hex;
                     }
                 }
             }
         } catch (Exception e) {
-            Log.e(TAG, "tryDirectReadMethod error: " + e.getMessage(), e);
+            Log.e(TAG, "tryDirectReadMethod error: " + e.getMessage());
         }
         return "";
     }
     
-    /**
-     * Use reflection to discover and call any read-like method
-     */
     private String tryReadWithReflectionDiscovery(int memBank, int startAddr, int wordCount, String epc) {
         try {
             Method[] methods = UHFReader.class.getDeclaredMethods();
             
-            StringBuilder methodList = new StringBuilder("Available methods: ");
-            for (Method m : methods) {
-                methodList.append(m.getName()).append(", ");
-            }
-            Log.d(TAG, methodList.toString());
-            
             for (Method method : methods) {
                 String name = method.getName().toLowerCase();
                 
-                if (!name.contains("read") && !name.contains("data") && !name.contains("memory") && !name.contains("bank")) {
+                if (!name.contains("read") && !name.contains("data") && !name.contains("memory")) {
                     continue;
                 }
-                
-                if (name.contains("power") || name.contains("rssi") || name.contains("temperature") ||
-                    name.contains("version") || name.contains("listener") || name.contains("config")) {
+                if (name.contains("power") || name.contains("rssi") || name.contains("listener")) {
                     continue;
                 }
-                
                 if (method.getReturnType() == void.class) continue;
                 
                 Class<?>[] paramTypes = method.getParameterTypes();
-                
-                Log.d(TAG, "Discovery trying: " + method.getName() + " with " + paramTypes.length + " params, returns " + method.getReturnType().getSimpleName());
-                
                 Object result = null;
                 
                 try {
@@ -725,44 +698,24 @@ public class MivantaRfidPlugin extends Plugin {
         return "";
     }
     
-    /**
-     * Extract hex string from various result types
-     */
     private String extractHexFromResult(Object result) {
         if (result == null) return "";
         
         try {
-            Log.d(TAG, "extractHexFromResult: type=" + result.getClass().getName());
-            
             if (result instanceof UHFReaderResult) {
                 UHFReaderResult<?> readerResult = (UHFReaderResult<?>) result;
-                int code = readerResult.getResultCode();
-                String msg = readerResult.getMessage();
-                Log.d(TAG, "UHFReaderResult code=" + code + ", msg=" + msg);
-                
                 Object data = readerResult.getData();
-                if (data == null) {
-                    Log.d(TAG, "UHFReaderResult data is null");
-                    return "";
-                }
                 
-                Log.d(TAG, "UHFReaderResult data type: " + data.getClass().getName());
+                if (data == null) return "";
                 
                 if (data instanceof byte[]) {
-                    byte[] bytes = (byte[]) data;
-                    Log.d(TAG, "Data is byte[], length=" + bytes.length);
-                    return bytesToHex(bytes);
+                    return bytesToHex((byte[]) data);
                 } else if (data instanceof String) {
-                    Log.d(TAG, "Data is String: " + data);
                     return (String) data;
                 } else if (data instanceof UHFTagEntity) {
-                    UHFTagEntity tagData = (UHFTagEntity) data;
-                    String tagEpc = tagData.getEcpHex();
-                    Log.d(TAG, "Data is UHFTagEntity, EPC: " + tagEpc);
-                    return tryExtractExtraDataFromTag(tagData);
+                    return tryExtractExtraDataFromTag((UHFTagEntity) data);
                 } else {
                     String str = data.toString();
-                    Log.d(TAG, "Data is unknown type, toString: " + str);
                     if (str.matches("^[0-9A-Fa-f]+$")) {
                         return str.toUpperCase();
                     }
@@ -800,9 +753,6 @@ public class MivantaRfidPlugin extends Plugin {
         return "";
     }
     
-    /**
-     * Try to extract extra data from UHFTagEntity using reflection
-     */
     private String tryExtractExtraDataFromTag(UHFTagEntity tag) {
         try {
             Method[] methods = tag.getClass().getDeclaredMethods();
@@ -824,9 +774,6 @@ public class MivantaRfidPlugin extends Plugin {
         return "";
     }
     
-    /**
-     * Convert byte array to hex string
-     */
     private String bytesToHex(byte[] bytes) {
         if (bytes == null || bytes.length == 0) {
             return "";
@@ -846,7 +793,10 @@ public class MivantaRfidPlugin extends Plugin {
         }
 
         if (isScanning) {
-            call.reject("Already scanning");
+            JSObject response = new JSObject();
+            response.put("scanning", true);
+            response.put("message", "Already scanning");
+            call.resolve(response);
             return;
         }
 
@@ -862,9 +812,7 @@ public class MivantaRfidPlugin extends Plugin {
                                 tagData.put("rssi", tag.getRssi());
                                 tagData.put("count", tag.getCount());
                                 tagData.put("timestamp", System.currentTimeMillis());
-                                
                                 notifyListeners("tagDetected", tagData);
-                                Log.d(TAG, "Tag detected: " + tag.getEcpHex());
                             }
                         }
                     }
@@ -879,14 +827,11 @@ public class MivantaRfidPlugin extends Plugin {
                 
                 JSObject response = new JSObject();
                 response.put("scanning", true);
-                response.put("message", "Continuous scanning started");
+                response.put("message", "Scanning started");
                 call.resolve(response);
-                
                 Log.d(TAG, "Continuous scanning started");
             } else {
-                String errorMsg = result.getMessage();
-                Log.e(TAG, "Failed to start scanning: " + errorMsg);
-                call.reject("Failed to start scanning: " + errorMsg);
+                call.reject("Failed to start: " + result.getMessage());
             }
         } catch (Exception e) {
             Log.e(TAG, "Start continuous error: " + e.getMessage(), e);
@@ -899,15 +844,14 @@ public class MivantaRfidPlugin extends Plugin {
         if (!isScanning) {
             JSObject response = new JSObject();
             response.put("scanning", false);
-            response.put("message", "Not currently scanning");
+            response.put("message", "Not scanning");
             call.resolve(response);
             return;
         }
 
         try {
             if (uhfReader != null) {
-                UHFReaderResult<Boolean> result = uhfReader.stopInventory();
-                Log.d(TAG, "Stop inventory result: " + result.getMessage());
+                uhfReader.stopInventory();
             }
             isScanning = false;
             
@@ -915,7 +859,6 @@ public class MivantaRfidPlugin extends Plugin {
             response.put("scanning", false);
             response.put("message", "Scanning stopped");
             call.resolve(response);
-            
             Log.d(TAG, "Continuous scanning stopped");
         } catch (Exception e) {
             Log.e(TAG, "Stop continuous error: " + e.getMessage(), e);
@@ -949,7 +892,6 @@ public class MivantaRfidPlugin extends Plugin {
                     response.put("power", power);
                     response.put("message", "Power set to " + power + " dBm");
                     call.resolve(response);
-                    
                     Log.d(TAG, "Power set to: " + power);
                 } else {
                     call.reject("Failed to set power: " + result.getMessage());

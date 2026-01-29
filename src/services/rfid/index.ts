@@ -1,7 +1,13 @@
 // RFID Service exports
 export { rfidService, default } from './rfid-service';
-export type { RfidTagData, RfidStatus, FastTagData, DebugInfoResult, RfidReadMode, RfidServiceCallbacks, TriggerEventData } from './rfid-service';
+export type { RfidReadMode, RfidServiceCallbacks, TriggerScanResult } from './rfid-service';
 export type { 
+  RfidTagData, 
+  RfidStatus, 
+  FastTagData, 
+  DebugInfoResult, 
+  TriggerEventData,
+  TriggerScanResult as PluginTriggerScanResult,
   MivantaRfidPlugin,
   ConnectionResult,
   SingleReadResult,

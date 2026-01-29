@@ -2,8 +2,8 @@ import * as React from "react";
 
 import type { ToastActionElement, ToastProps } from "@/components/ui/toast";
 
-const TOAST_LIMIT = 3;
-const TOAST_REMOVE_DELAY = 5000; // Auto-dismiss after 5 seconds
+const TOAST_LIMIT = 1; // Only show 1 toast at a time to prevent stacking
+const TOAST_REMOVE_DELAY = 3000; // Auto-dismiss after 3 seconds (faster)
 
 type ToasterToast = ToastProps & {
   id: string;
@@ -54,7 +54,7 @@ const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
 const addToRemoveQueue = (toastId: string) => {
   if (toastTimeouts.has(toastId)) {
-    return;
+    clearTimeout(toastTimeouts.get(toastId));
   }
 
   const timeout = setTimeout(() => {
@@ -71,9 +71,22 @@ const addToRemoveQueue = (toastId: string) => {
 export const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case "ADD_TOAST":
+      // Clear all existing toasts first
+      state.toasts.forEach((t) => {
+        const timeout = toastTimeouts.get(t.id);
+        if (timeout) {
+          clearTimeout(timeout);
+          toastTimeouts.delete(t.id);
+        }
+      });
+      
+      // Add new toast (limit to 1)
+      const newToast = action.toast;
+      addToRemoveQueue(newToast.id);
+      
       return {
         ...state,
-        toasts: [action.toast, ...state.toasts].slice(0, TOAST_LIMIT),
+        toasts: [newToast],
       };
 
     case "UPDATE_TOAST":
@@ -85,26 +98,20 @@ export const reducer = (state: State, action: Action): State => {
     case "DISMISS_TOAST": {
       const { toastId } = action;
 
-      // ! Side effects ! - This could be extracted into a dismissToast() action,
-      // but I'll keep it here for simplicity
       if (toastId) {
-        addToRemoveQueue(toastId);
+        const timeout = toastTimeouts.get(toastId);
+        if (timeout) {
+          clearTimeout(timeout);
+          toastTimeouts.delete(toastId);
+        }
       } else {
-        state.toasts.forEach((toast) => {
-          addToRemoveQueue(toast.id);
-        });
+        toastTimeouts.forEach((timeout) => clearTimeout(timeout));
+        toastTimeouts.clear();
       }
 
       return {
         ...state,
-        toasts: state.toasts.map((t) =>
-          t.id === toastId || toastId === undefined
-            ? {
-                ...t,
-                open: false,
-              }
-            : t,
-        ),
+        toasts: state.toasts.filter((t) => t.id !== toastId),
       };
     }
     case "REMOVE_TOAST":

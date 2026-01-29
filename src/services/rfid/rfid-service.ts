@@ -2,6 +2,17 @@ import MivantaRfid, { RfidTagData, RfidStatus, FastTagData, DebugInfoResult, Tri
 
 export type RfidReadMode = 'single' | 'continuous';
 
+// New event type for trigger-initiated scans
+export interface TriggerScanResult {
+  success: boolean;
+  tid?: string;
+  epc?: string;
+  userData?: string;
+  rssi?: number;
+  timestamp: number;
+  message?: string;
+}
+
 export interface RfidServiceCallbacks {
   onTagDetected?: (tag: RfidTagData) => void;
   onConnectionChange?: (connected: boolean) => void;
@@ -9,12 +20,12 @@ export interface RfidServiceCallbacks {
   onError?: (error: Error) => void;
   onTriggerPressed?: (data: TriggerEventData) => void;
   onTriggerReleased?: (data: TriggerEventData) => void;
+  onTriggerScanResult?: (data: TriggerScanResult) => void;
 }
 
 /**
- * RFID Service
+ * RFID Service for Impact ATMS
  * High-level service for managing RFID reader operations
- * Use this in your React components instead of calling the plugin directly
  */
 class RfidService {
   private static instance: RfidService;
@@ -22,6 +33,7 @@ class RfidService {
   private listenerHandle: { remove: () => void } | null = null;
   private triggerPressedHandle: { remove: () => void } | null = null;
   private triggerReleasedHandle: { remove: () => void } | null = null;
+  private triggerScanResultHandle: { remove: () => void } | null = null;
   private status: RfidStatus = {
     connected: false,
     scanning: false,
@@ -29,9 +41,7 @@ class RfidService {
   };
   private currentMode: RfidReadMode = 'single';
 
-  private constructor() {
-    // Private constructor for singleton
-  }
+  private constructor() {}
 
   static getInstance(): RfidService {
     if (!RfidService.instance) {
@@ -40,63 +50,40 @@ class RfidService {
     return RfidService.instance;
   }
 
-  /**
-   * Set callbacks for RFID events
-   */
   setCallbacks(callbacks: RfidServiceCallbacks): void {
     this.callbacks = { ...this.callbacks, ...callbacks };
   }
 
-  /**
-   * Clear all callbacks
-   */
   clearCallbacks(): void {
     this.callbacks = {};
   }
 
-  /**
-   * Get current reader status
-   */
   getStatus(): RfidStatus {
     return { ...this.status };
   }
 
-  /**
-   * Get current mode
-   */
   getMode(): RfidReadMode {
     return this.currentMode;
   }
 
-  /**
-   * Set the current read mode (syncs with native plugin for button behavior)
-   */
   async setMode(mode: RfidReadMode): Promise<void> {
     this.currentMode = mode;
     try {
       await MivantaRfid.setMode({ mode });
       console.log('RFID Service: Mode set to', mode);
     } catch (error) {
-      console.warn('RFID Service: Could not sync mode to native plugin', error);
+      console.warn('RFID Service: Could not sync mode', error);
     }
   }
 
-  /**
-   * Connect to the RFID reader
-   */
   async connect(): Promise<boolean> {
     try {
       const result = await MivantaRfid.connect();
       this.status.connected = result.connected;
       this.callbacks.onConnectionChange?.(result.connected);
       
-      // Set up tag detection listener
       await this.setupTagListener();
-      
-      // Set up trigger button listeners
       await this.setupTriggerListeners();
-      
-      // Sync mode to native
       await this.setMode(this.currentMode);
       
       console.log('RFID Service: Connected');
@@ -109,31 +96,14 @@ class RfidService {
     }
   }
 
-  /**
-   * Disconnect from the RFID reader
-   */
   async disconnect(): Promise<void> {
     try {
-      // Remove listeners first
-      if (this.listenerHandle) {
-        this.listenerHandle.remove();
-        this.listenerHandle = null;
-      }
-      if (this.triggerPressedHandle) {
-        this.triggerPressedHandle.remove();
-        this.triggerPressedHandle = null;
-      }
-      if (this.triggerReleasedHandle) {
-        this.triggerReleasedHandle.remove();
-        this.triggerReleasedHandle = null;
-      }
-      
+      this.removeAllListeners();
       await MivantaRfid.disconnect();
       this.status.connected = false;
       this.status.scanning = false;
       this.callbacks.onConnectionChange?.(false);
       this.callbacks.onScanningChange?.(false);
-      
       console.log('RFID Service: Disconnected');
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -141,10 +111,26 @@ class RfidService {
       console.error('RFID Service: Disconnect failed', error);
     }
   }
+  
+  private removeAllListeners(): void {
+    if (this.listenerHandle) {
+      this.listenerHandle.remove();
+      this.listenerHandle = null;
+    }
+    if (this.triggerPressedHandle) {
+      this.triggerPressedHandle.remove();
+      this.triggerPressedHandle = null;
+    }
+    if (this.triggerReleasedHandle) {
+      this.triggerReleasedHandle.remove();
+      this.triggerReleasedHandle = null;
+    }
+    if (this.triggerScanResultHandle) {
+      this.triggerScanResultHandle.remove();
+      this.triggerScanResultHandle = null;
+    }
+  }
 
-  /**
-   * Perform a single tag read
-   */
   async readSingle(): Promise<RfidTagData | null> {
     if (!this.status.connected) {
       this.callbacks.onError?.(new Error('Reader not connected'));
@@ -159,9 +145,7 @@ class RfidService {
         timestamp: result.timestamp
       };
       
-      // Notify callback
       this.callbacks.onTagDetected?.(tagData);
-      
       console.log('RFID Service: Single read -', result.epc);
       return tagData;
     } catch (error) {
@@ -172,10 +156,6 @@ class RfidService {
     }
   }
 
-  /**
-   * Read complete FASTag details including TID, EPC, and User memory
-   * @returns FastTagData with all memory bank contents
-   */
   async readTagDetails(): Promise<FastTagData | null> {
     if (!this.status.connected) {
       this.callbacks.onError?.(new Error('Reader not connected'));
@@ -186,7 +166,7 @@ class RfidService {
       const result = await MivantaRfid.readTagDetails();
       
       if (!result.success) {
-        console.log('RFID Service: No tag detected for detailed read');
+        console.log('RFID Service: No tag detected');
         return null;
       }
       
@@ -198,7 +178,7 @@ class RfidService {
         timestamp: result.timestamp
       };
       
-      console.log('RFID Service: Tag details read -', 
+      console.log('RFID Service: Tag details -', 
         `TID: ${result.tid}, EPC: ${result.epc}, User: ${result.userData}`);
       
       return fastTagData;
@@ -210,9 +190,6 @@ class RfidService {
     }
   }
 
-  /**
-   * Start continuous inventory scanning
-   */
   async startContinuous(): Promise<boolean> {
     if (!this.status.connected) {
       this.callbacks.onError?.(new Error('Reader not connected'));
@@ -223,7 +200,6 @@ class RfidService {
       await MivantaRfid.startContinuous();
       this.status.scanning = true;
       this.callbacks.onScanningChange?.(true);
-      
       console.log('RFID Service: Continuous scanning started');
       return true;
     } catch (error) {
@@ -234,16 +210,12 @@ class RfidService {
     }
   }
 
-  /**
-   * Stop continuous inventory scanning
-   */
   async stopContinuous(): Promise<void> {
     try {
       await MivantaRfid.stopContinuous();
       this.status.scanning = false;
       this.callbacks.onScanningChange?.(false);
-      
-      console.log('RFID Service: Continuous scanning stopped');
+      console.log('RFID Service: Scanning stopped');
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       this.callbacks.onError?.(err);
@@ -251,10 +223,6 @@ class RfidService {
     }
   }
 
-  /**
-   * Set reader power level (affects read range)
-   * @param power Power in dBm (5-33)
-   */
   async setPower(power: number): Promise<boolean> {
     if (!this.status.connected) {
       this.callbacks.onError?.(new Error('Reader not connected'));
@@ -264,7 +232,6 @@ class RfidService {
     try {
       await MivantaRfid.setPower({ power });
       this.status.power = power;
-      
       console.log('RFID Service: Power set to', power, 'dBm');
       return true;
     } catch (error) {
@@ -275,9 +242,6 @@ class RfidService {
     }
   }
 
-  /**
-   * Refresh status from the native plugin
-   */
   async refreshStatus(): Promise<RfidStatus> {
     try {
       this.status = await MivantaRfid.getStatus();
@@ -288,9 +252,6 @@ class RfidService {
     }
   }
 
-  /**
-   * Get debug information from native SDK
-   */
   async getDebugInfo(): Promise<DebugInfoResult> {
     try {
       return await MivantaRfid.getDebugInfo();
@@ -300,16 +261,12 @@ class RfidService {
         sdkAvailable: false,
         nativeLibsLoaded: false,
         isConnected: false,
-        methods: 'Error getting debug info: ' + String(error)
+        methods: 'Error: ' + String(error)
       };
     }
   }
 
-  /**
-   * Set up listener for tag detection events
-   */
   private async setupTagListener(): Promise<void> {
-    // Remove existing listener if any
     if (this.listenerHandle) {
       this.listenerHandle.remove();
     }
@@ -320,16 +277,15 @@ class RfidService {
     });
   }
 
-  /**
-   * Set up listeners for hardware trigger button events
-   */
   private async setupTriggerListeners(): Promise<void> {
-    // Remove existing listeners if any
     if (this.triggerPressedHandle) {
       this.triggerPressedHandle.remove();
     }
     if (this.triggerReleasedHandle) {
       this.triggerReleasedHandle.remove();
+    }
+    if (this.triggerScanResultHandle) {
+      this.triggerScanResultHandle.remove();
     }
 
     this.triggerPressedHandle = await MivantaRfid.addListener('triggerPressed', (data) => {
@@ -341,12 +297,16 @@ class RfidService {
       console.log('RFID Service: Trigger released -', data);
       this.callbacks.onTriggerReleased?.(data);
     });
+
+    // Listen for scan results from physical trigger
+    this.triggerScanResultHandle = await MivantaRfid.addListener('triggerScanResult', (data: TriggerScanResult) => {
+      console.log('RFID Service: Trigger scan result -', data);
+      this.callbacks.onTriggerScanResult?.(data);
+    });
   }
 }
 
-// Export singleton instance
 export const rfidService = RfidService.getInstance();
 export default rfidService;
 
-// Re-export types
 export type { RfidTagData, RfidStatus, FastTagData, DebugInfoResult, TriggerEventData };

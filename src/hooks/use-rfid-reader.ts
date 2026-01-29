@@ -1,21 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
-import { rfidService, RfidTagData, RfidStatus, RfidReadMode, FastTagData, TriggerEventData } from '@/services/rfid';
+import { rfidService, RfidTagData, RfidStatus, RfidReadMode, FastTagData, TriggerEventData, TriggerScanResult } from '@/services/rfid';
 import { toast } from '@/hooks/use-toast';
 
 interface UseRfidReaderReturn {
-  // Status
   isConnected: boolean;
   isScanning: boolean;
   power: number;
   mode: RfidReadMode;
-  
-  // Tag data
   lastTag: RfidTagData | null;
   lastFastTag: FastTagData | null;
   tagHistory: RfidTagData[];
   fastTagHistory: FastTagData[];
-  
-  // Actions
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   readSingle: () => Promise<void>;
@@ -28,10 +23,6 @@ interface UseRfidReaderReturn {
   clearHistory: () => void;
 }
 
-/**
- * React hook for RFID reader operations
- * Provides easy integration with UI components
- */
 export function useRfidReader(
   onTagDetected?: (tag: RfidTagData) => void
 ): UseRfidReaderReturn {
@@ -44,45 +35,41 @@ export function useRfidReader(
   const [tagHistory, setTagHistory] = useState<RfidTagData[]>([]);
   const [fastTagHistory, setFastTagHistory] = useState<FastTagData[]>([]);
 
-  // Handler for hardware trigger button
-  const handleTriggerPressed = useCallback(async (data: TriggerEventData) => {
-    console.log('Trigger pressed, mode:', data.mode, 'isScanning:', data.isScanning);
+  // Handle trigger scan results from physical button
+  const handleTriggerScanResult = useCallback((data: TriggerScanResult) => {
+    console.log('Trigger scan result received:', data);
     
-    if (data.mode === 'single') {
-      // Single mode: perform single read on trigger press
-      try {
-        const fastTag = await rfidService.readTagDetails();
-        if (fastTag) {
-          setLastFastTag(fastTag);
-          setFastTagHistory(prev => [fastTag, ...prev].slice(0, 100));
-          
-          const basicTag: RfidTagData = {
-            epc: fastTag.epc,
-            rssi: fastTag.rssi,
-            timestamp: fastTag.timestamp
-          };
-          setLastTag(basicTag);
-          setTagHistory(prev => [basicTag, ...prev].slice(0, 100));
-          onTagDetected?.(basicTag);
-          
-          toast({
-            title: 'Tag Scanned',
-            description: `EPC: ${fastTag.epc.substring(0, 16)}...`
-          });
-        }
-      } catch (error) {
-        console.error('Trigger scan failed:', error);
-      }
+    if (data.success && data.epc) {
+      const fastTag: FastTagData = {
+        tid: data.tid || '',
+        epc: data.epc,
+        userData: data.userData || '',
+        rssi: data.rssi || 0,
+        timestamp: data.timestamp
+      };
+      
+      setLastFastTag(fastTag);
+      setFastTagHistory(prev => [fastTag, ...prev].slice(0, 100));
+      
+      const basicTag: RfidTagData = {
+        epc: fastTag.epc,
+        rssi: fastTag.rssi,
+        timestamp: fastTag.timestamp
+      };
+      setLastTag(basicTag);
+      setTagHistory(prev => [basicTag, ...prev].slice(0, 100));
+      onTagDetected?.(basicTag);
+      
+      toast({
+        title: 'Tag Scanned',
+        description: `EPC: ${fastTag.epc.substring(0, 12)}...`
+      });
     } else {
-      // Continuous mode: toggle scanning
-      if (!data.isScanning) {
-        await rfidService.startContinuous();
-        toast({
-          title: 'Scanning Started',
-          description: 'Continuous scanning active'
-        });
-      }
-      // In continuous mode, scanning continues until mode is changed back to single
+      toast({
+        title: 'No Tag',
+        description: 'Hold tag closer',
+        variant: 'destructive'
+      });
     }
   }, [onTagDetected]);
 
@@ -91,27 +78,27 @@ export function useRfidReader(
     rfidService.setCallbacks({
       onTagDetected: (tag) => {
         setLastTag(tag);
-        setTagHistory(prev => [tag, ...prev].slice(0, 100)); // Keep last 100 tags
+        setTagHistory(prev => [tag, ...prev].slice(0, 100));
         onTagDetected?.(tag);
       },
       onConnectionChange: setIsConnected,
       onScanningChange: setIsScanning,
       onError: (error) => {
         toast({
-          title: 'RFID Error',
+          title: 'Error',
           description: error.message,
           variant: 'destructive'
         });
       },
-      onTriggerPressed: handleTriggerPressed,
+      onTriggerPressed: (data) => {
+        console.log('Trigger pressed:', data);
+      },
       onTriggerReleased: (data) => {
         console.log('Trigger released:', data);
-        // For single mode, no action on release
-        // For continuous mode, keep scanning until mode changes
-      }
+      },
+      onTriggerScanResult: handleTriggerScanResult
     });
 
-    // Initial status sync
     const syncStatus = async () => {
       const status = await rfidService.refreshStatus();
       setIsConnected(status.connected);
@@ -123,14 +110,14 @@ export function useRfidReader(
     return () => {
       rfidService.clearCallbacks();
     };
-  }, [onTagDetected, handleTriggerPressed]);
+  }, [onTagDetected, handleTriggerScanResult]);
 
   const connect = useCallback(async () => {
     const success = await rfidService.connect();
     if (success) {
       toast({
         title: 'Connected',
-        description: 'RFID reader connected successfully'
+        description: 'RFID reader ready'
       });
     }
   }, []);
@@ -147,26 +134,19 @@ export function useRfidReader(
     const tag = await rfidService.readSingle();
     if (tag) {
       toast({
-        title: 'Tag Detected',
-        description: `EPC: ${tag.epc.substring(0, 16)}...`
+        title: 'Tag Found',
+        description: `EPC: ${tag.epc.substring(0, 12)}...`
       });
     }
   }, []);
 
-  /**
-   * Read single tag AND attempt to read FASTag details
-   * This populates both Raw Data and FASTag tabs
-   */
   const readSingleWithDetails = useCallback(async () => {
-    // First try to read full FASTag details (includes EPC)
     const fastTag = await rfidService.readTagDetails();
     
     if (fastTag) {
-      // Add to FASTag history
       setLastFastTag(fastTag);
       setFastTagHistory(prev => [fastTag, ...prev].slice(0, 100));
       
-      // Also add to basic tag history (Raw Data)
       const basicTag: RfidTagData = {
         epc: fastTag.epc,
         rssi: fastTag.rssi,
@@ -176,36 +156,23 @@ export function useRfidReader(
       setTagHistory(prev => [basicTag, ...prev].slice(0, 100));
       onTagDetected?.(basicTag);
       
-      // Show what we got
       const hasAllData = fastTag.tid && fastTag.userData;
-      const hasTidOnly = fastTag.tid && !fastTag.userData;
-      const hasUserOnly = !fastTag.tid && fastTag.userData;
       
       if (hasAllData) {
         toast({
-          title: 'FASTag Read Complete',
-          description: `TID, EPC, and User data captured`
-        });
-      } else if (hasTidOnly) {
-        toast({
-          title: 'FASTag Read (Partial)',
-          description: `TID and EPC captured. User data not available.`
-        });
-      } else if (hasUserOnly) {
-        toast({
-          title: 'FASTag Read (Partial)',
-          description: `EPC and User data captured. TID not available.`
+          title: 'FASTag Complete',
+          description: 'TID, EPC, User data captured'
         });
       } else {
         toast({
-          title: 'Tag Detected',
-          description: `EPC only - TID/User banks may be protected`
+          title: 'Tag Found',
+          description: `EPC: ${fastTag.epc.substring(0, 12)}...`
         });
       }
     } else {
       toast({
-        title: 'No Tag Found',
-        description: 'Hold tag closer and try again',
+        title: 'No Tag',
+        description: 'Hold tag closer',
         variant: 'destructive'
       });
     }
@@ -218,12 +185,12 @@ export function useRfidReader(
       setFastTagHistory(prev => [fastTag, ...prev].slice(0, 100));
       toast({
         title: 'FASTag Read',
-        description: `TID: ${fastTag.tid.substring(0, 12)}...`
+        description: `EPC: ${fastTag.epc.substring(0, 12)}...`
       });
     } else {
       toast({
-        title: 'No Tag Found',
-        description: 'No FASTag detected. Try again.',
+        title: 'No Tag',
+        description: 'No tag detected',
         variant: 'destructive'
       });
     }
@@ -245,12 +212,10 @@ export function useRfidReader(
     }
   }, []);
 
-  // Set mode and sync to native plugin
   const setMode = useCallback((newMode: RfidReadMode) => {
     setModeState(newMode);
     rfidService.setMode(newMode);
     
-    // If switching from continuous to single and currently scanning, stop scanning
     if (newMode === 'single' && isScanning) {
       rfidService.stopContinuous();
     }

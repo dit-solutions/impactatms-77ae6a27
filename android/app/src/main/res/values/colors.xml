@@ -1,7 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#3880FF</color>
-    <color name="colorPrimaryDark">#3171E0</color>
-    <color name="colorAccent">#3880FF</color>
-    <color name="ic_launcher_background">#3880FF</color>
+    <!-- Impact ATMS Brand Colors -->
+    <color name="colorPrimary">#FAAC0A</color>
+    <color name="colorPrimaryDark">#E09800</color>
+    <color name="colorAccent">#FAAC0A</color>
+    <color name="colorSecondary">#464660</color>
+    <color name="colorWhite">#FFFFFF</color>
+    
+    <!-- App icon background uses secondary (dark slate) -->
+    <color name="ic_launcher_background">#464660</color>
+    
+    <!-- Splash screen background -->
+    <color name="splash_background">#464660</color>
 </resources>

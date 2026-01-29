@@ -4,6 +4,7 @@ import { RfidReaderPanel } from '@/components/rfid';
 import { Button } from '@/components/ui/button';
 import { Settings } from 'lucide-react';
 import type { RfidTagData } from '@/services/rfid';
+import logoLight from '@/assets/logo-light.png';
 
 const Index = () => {
   const handleTagDetected = (tag: RfidTagData) => {
@@ -16,11 +17,18 @@ const Index = () => {
       <div className="max-w-md mx-auto">
         <header className="mb-6">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">Toll RFID Scanner</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Mivanta CX1500N Handheld Reader
-              </p>
+            <div className="flex items-center gap-3">
+              <img 
+                src={logoLight} 
+                alt="Impact ATMS" 
+                className="h-10 w-auto dark:hidden"
+              />
+              <div>
+                <h1 className="text-xl font-bold text-secondary">Impact ATMS</h1>
+                <p className="text-xs text-muted-foreground">
+                  RFID Tag Scanner
+                </p>
+              </div>
             </div>
             <Button variant="ghost" size="icon" asChild>
               <Link to="/settings">

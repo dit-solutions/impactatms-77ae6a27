@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Toll RFID Scanner</string>
-    <string name="title_activity_main">Toll RFID Scanner</string>
+    <string name="app_name">Impact ATMS</string>
+    <string name="title_activity_main">Impact ATMS</string>
     <string name="package_name">app.lovable.f68cb15949ce434d93731abbed2b0512</string>
     <string name="custom_url_scheme">app.lovable.f68cb15949ce434d93731abbed2b0512</string>
 </resources>

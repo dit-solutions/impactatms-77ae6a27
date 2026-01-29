@@ -97,6 +97,20 @@ export interface TriggerEventData {
   action: 'trigger_pressed' | 'trigger_released';
   mode: string;
   isScanning?: boolean;
+  keyCode?: number;
+}
+
+/**
+ * Trigger scan result from physical button scan
+ */
+export interface TriggerScanResult {
+  success: boolean;
+  tid?: string;
+  epc?: string;
+  userData?: string;
+  rssi?: number;
+  timestamp: number;
+  message?: string;
 }
 
 /**
@@ -191,6 +205,14 @@ export interface MivantaRfidPlugin {
   addListener(
     eventName: 'triggerReleased',
     listenerFunc: (data: TriggerEventData) => void
+  ): Promise<{ remove: () => void }>;
+  
+  /**
+   * Add listener for trigger scan result (from physical button)
+   */
+  addListener(
+    eventName: 'triggerScanResult',
+    listenerFunc: (data: TriggerScanResult) => void
   ): Promise<{ remove: () => void }>;
   
   /**
