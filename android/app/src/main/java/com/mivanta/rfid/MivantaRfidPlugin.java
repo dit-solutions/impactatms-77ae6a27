@@ -31,33 +31,36 @@ public class MivantaRfidPlugin extends Plugin {
 
     /**
      * Explicitly load native libraries required by the Mivanta SDK.
-     * This must be done before any SDK calls.
+     * The AAR v1.1.0 may bundle these libraries, but we load them manually
+     * as a fallback to ensure compatibility across devices.
      */
     private static synchronized void loadNativeLibraries() {
         if (nativeLibsLoaded) {
             return;
         }
         
-        try {
-            // Load in dependency order - power first, then serial, then module API
-            Log.d(TAG, "Loading native library: power");
-            System.loadLibrary("power");
-            
-            Log.d(TAG, "Loading native library: SerialPortHc");
-            System.loadLibrary("SerialPortHc");
-            
-            Log.d(TAG, "Loading native library: ModuleAPI");
-            System.loadLibrary("ModuleAPI");
-            
-            nativeLibsLoaded = true;
-            Log.d(TAG, "All native libraries loaded successfully");
-        } catch (UnsatisfiedLinkError e) {
-            Log.e(TAG, "Failed to load native library: " + e.getMessage(), e);
-            nativeLibsLoaded = false;
-        } catch (Throwable t) {
-            Log.e(TAG, "Error loading native libraries: " + t.getMessage(), t);
-            nativeLibsLoaded = false;
+        // List of libraries in dependency order
+        String[] libraries = {"power", "SerialPortHc", "ModuleAPI"};
+        boolean allLoaded = true;
+        
+        for (String lib : libraries) {
+            try {
+                Log.d(TAG, "Loading native library: " + lib);
+                System.loadLibrary(lib);
+                Log.d(TAG, "Successfully loaded: " + lib);
+            } catch (UnsatisfiedLinkError e) {
+                // Library might already be loaded by the AAR, or not available
+                Log.w(TAG, "Could not load " + lib + " (may be bundled in AAR): " + e.getMessage());
+                // Don't fail immediately - the AAR might have loaded it already
+            } catch (Throwable t) {
+                Log.e(TAG, "Error loading " + lib + ": " + t.getMessage(), t);
+                allLoaded = false;
+            }
         }
+        
+        // Mark as loaded - we'll verify at SDK init time
+        nativeLibsLoaded = true;
+        Log.d(TAG, "Native library loading completed (allExplicitlyLoaded=" + allLoaded + ")");
     }
 
     @Override

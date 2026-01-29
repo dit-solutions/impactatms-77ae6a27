@@ -57,7 +57,10 @@ dependencies {
     // Capacitor core
     implementation project(':capacitor-android')
     
-    // Include all JAR files from libs folder (for Mivanta SDK)
+    // Mivanta UHF SDK AAR v1.1.0 (self-contained with all classes and native libs)
+    implementation(name: 'HCUHF_v1.1.0_20250620', ext: 'aar')
+    
+    // Include any additional JAR files from libs folder
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     
     // AndroidX dependencies
