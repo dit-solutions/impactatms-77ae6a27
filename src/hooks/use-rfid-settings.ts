@@ -10,15 +10,16 @@ export function useRfidSettings() {
   const [mode, setModeState] = useState<RfidReadMode>('single');
   const [isConnected, setIsConnected] = useState(false);
 
+  const refreshStatus = useCallback(async () => {
+    const status = await rfidService.refreshStatus();
+    setIsConnected(status.connected);
+    setPowerState(status.power);
+  }, []);
+
   // Sync with service status on mount
   useEffect(() => {
-    const syncStatus = async () => {
-      const status = await rfidService.refreshStatus();
-      setIsConnected(status.connected);
-      setPowerState(status.power);
-    };
-    syncStatus();
-  }, []);
+    refreshStatus();
+  }, [refreshStatus]);
 
   const setPower = useCallback(async (newPower: number) => {
     setPowerState(newPower);
@@ -38,6 +39,7 @@ export function useRfidSettings() {
     mode,
     isConnected,
     setPower,
-    setMode
+    setMode,
+    refreshStatus
   };
 }

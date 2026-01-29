@@ -1,11 +1,11 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Power, PowerOff, ScanLine, StopCircle, Scan, CreditCard, FileText } from 'lucide-react';
+import { ScanLine, StopCircle, Scan, CreditCard, FileText, Settings, Wifi, WifiOff } from 'lucide-react';
 import { useRfidReader } from '@/hooks/use-rfid-reader';
-import { RfidConnectionStatus } from './RfidConnectionStatus';
 import { RfidTagHistory } from './RfidTagHistory';
 import { FastTagHistory } from './FastTagHistory';
 import type { RfidTagData } from '@/services/rfid';
@@ -16,8 +16,8 @@ interface RfidReaderPanelProps {
 }
 
 /**
- * Complete RFID reader control panel
- * Simplified UI - settings moved to Settings page
+ * RFID reader scanning panel
+ * Connection controls moved to Settings page
  */
 export function RfidReaderPanel({ onTagDetected, className }: RfidReaderPanelProps) {
   const {
@@ -26,8 +26,6 @@ export function RfidReaderPanel({ onTagDetected, className }: RfidReaderPanelPro
     mode,
     tagHistory,
     fastTagHistory,
-    connect,
-    disconnect,
     readSingleWithDetails,
     startContinuous,
     stopContinuous,
@@ -54,33 +52,45 @@ export function RfidReaderPanel({ onTagDetected, className }: RfidReaderPanelPro
             <Scan className="h-5 w-5" />
             RFID Reader
           </CardTitle>
-          <RfidConnectionStatus 
-            isConnected={isConnected} 
-            isScanning={isScanning}
-          />
+          {/* Connection Status Badge */}
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
+            isConnected 
+              ? 'bg-green-500/10 text-green-600' 
+              : 'bg-muted text-muted-foreground'
+          }`}>
+            {isConnected ? (
+              <>
+                <Wifi className="h-4 w-4" />
+                <span>Connected</span>
+                {isScanning && (
+                  <span className="ml-1 h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                )}
+              </>
+            ) : (
+              <>
+                <WifiOff className="h-4 w-4" />
+                <span>Disconnected</span>
+              </>
+            )}
+          </div>
         </div>
       </CardHeader>
       
       <CardContent className="space-y-4">
-        {/* Connection Controls */}
-        <div className="flex gap-2">
-          {!isConnected ? (
-            <Button onClick={connect} className="flex-1">
-              <Power className="h-4 w-4 mr-2" />
-              Connect Reader
+        {!isConnected ? (
+          /* Not connected - show message to go to settings */
+          <div className="text-center py-8">
+            <WifiOff className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+            <p className="text-muted-foreground mb-4">Reader not connected</p>
+            <Button asChild>
+              <Link to="/settings">
+                <Settings className="h-4 w-4 mr-2" />
+                Go to Settings to Connect
+              </Link>
             </Button>
-          ) : (
-            <Button onClick={disconnect} variant="outline" className="flex-1">
-              <PowerOff className="h-4 w-4 mr-2" />
-              Disconnect
-            </Button>
-          )}
-        </div>
-
-        {isConnected && (
+          </div>
+        ) : (
           <>
-            <Separator />
-            
             {/* Single large scan button */}
             <Button 
               onClick={handleScanAction}
@@ -108,7 +118,7 @@ export function RfidReaderPanel({ onTagDetected, className }: RfidReaderPanelPro
             
             <Separator />
             
-            {/* Tag History with Tabs - FASTag first, renamed Basic to Raw Data */}
+            {/* Tag History with Tabs */}
             <Tabs defaultValue="fastag" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="fastag" className="text-xs">
