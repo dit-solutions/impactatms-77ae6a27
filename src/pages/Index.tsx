@@ -1,11 +1,36 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import React from 'react';
+import { RfidReaderPanel } from '@/components/rfid';
+import type { RfidTagData } from '@/services/rfid';
 
 const Index = () => {
+  const handleTagDetected = (tag: RfidTagData) => {
+    // This is where you integrate with your toll automation API
+    console.log('Tag detected - send to API:', tag.epc);
+    
+    // Example API call (uncomment and modify for your API):
+    // fetch('https://your-toll-api.com/vehicle/identify', {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json' },
+    //   body: JSON.stringify({ epc: tag.epc, timestamp: tag.timestamp })
+    // });
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
+    <div className="min-h-screen bg-background p-4">
+      <div className="max-w-md mx-auto">
+        <header className="mb-6 text-center">
+          <h1 className="text-2xl font-bold text-foreground">Toll RFID Scanner</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Mivanta CX1500N Handheld Reader
+          </p>
+        </header>
+        
+        <RfidReaderPanel onTagDetected={handleTagDetected} />
+        
+        <footer className="mt-6 text-center text-xs text-muted-foreground">
+          <p>Connected to Mivanta UHF SDK</p>
+          <p className="mt-1">Running in {typeof window !== 'undefined' && (window as any).Capacitor ? 'native' : 'web'} mode</p>
+        </footer>
       </div>
     </div>
   );
