@@ -1,174 +1,104 @@
 
-# Fix TID and User Memory Bank Reading
+# Fix App Icon and Splash Screen
 
-## Root Cause Analysis
+## Issues Identified
 
-After analyzing the manufacturer's demo code (`ReadFragment.java`), I found why the current implementation fails:
+### Issue 1: App Icon Shows Default Android Icon
 
-### Problems Identified
+The adaptive icon XML files have an incorrect configuration:
 
-| Issue | Current Implementation | Demo Code |
-|-------|----------------------|-----------|
-| Method name | Tries `Read` (capital R) and `read` via reflection | Uses `read` (lowercase) directly |
-| Parameters | Tries multiple signatures (3-6 params) | Uses exactly 5 parameters |
-| Filter class | Uses `UHFTagEntity` for filtering | Uses `SelectEntity` for filtering |
-| Result handling | Uses `getCode()` | Uses `getResultCode()` |
-| Result type | Expects various types | Returns `UHFReaderResult<String>` directly |
-
-### Correct API from Demo
-
-```text
-// The working read method signature:
-UHFReaderResult<String> result = UHFReader.getInstance().read(
-    password,      // String: "00000000"
-    membank,       // int: 0=Reserved, 1=EPC, 2=TID, 3=USER
-    address,       // int: start word address (typically 0)
-    wordCount,     // int: number of words to read
-    selectEntity   // SelectEntity: filter entity (can be null)
-);
-
-// Check result:
-if (result.getResultCode() == UHFReaderResult.ResultCode.CODE_SUCCESS) {
-    String hexData = result.getData();  // Already a hex string!
-}
+**Current (Broken):**
+```xml
+<!-- ic_launcher.xml -->
+<adaptive-icon>
+    <background android:drawable="@color/ic_launcher_background"/>
+    <foreground android:drawable="@mipmap/ic_launcher"/>  <!-- WRONG: Self-reference! -->
+</adaptive-icon>
 ```
+
+The foreground is referencing `@mipmap/ic_launcher` which creates a circular reference - the icon file points to itself. On Android 8+ (API 26+), adaptive icons require:
+- A **background** (color or image)
+- A **foreground** (the actual icon image, typically with transparency)
+
+The foreground should reference `@drawable/ic_launcher_foreground` (which exists in the drawable folder).
+
+### Issue 2: Splash Screen Not Showing Logo
+
+The Activity theme in `AndroidManifest.xml` uses `AppTheme.NoActionBar` but the splash theme `AppTheme.Splash` is never applied:
+
+```xml
+<!-- Current: Uses AppTheme.NoActionBar - no splash configuration -->
+<activity android:theme="@style/AppTheme.NoActionBar">
+```
+
+The `SplashScreen.installSplashScreen()` in MainActivity requires the activity to start with the splash theme.
 
 ---
 
 ## Solution
 
-Replace the reflection-based approach with direct calls matching the demo code exactly.
+### Step 1: Fix Adaptive Icon XMLs
 
-### Step 1: Add SelectEntity Import
-
-Add the missing import for the filter class:
-```java
-import com.xlzn.hcpda.uhf.entity.SelectEntity;
+**File: `android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`**
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background"/>
+    <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+</adaptive-icon>
 ```
 
-### Step 2: Simplify tryReadMemoryBankDirect Method
-
-Replace the complex reflection logic with a direct call:
-
-```java
-private String tryReadMemoryBankDirect(int memBank, int startAddr, int wordCount, String epc) {
-    Log.d(TAG, "Reading bank=" + memBank + ", addr=" + startAddr + ", words=" + wordCount);
-    
-    try {
-        // Try with no filter first (matching demo: read(pwd, bank, addr, count, null))
-        UHFReaderResult<String> result = uhfReader.read(
-            DEFAULT_PASSWORD, 
-            memBank, 
-            startAddr, 
-            wordCount, 
-            null  // No filter - read any tag in range
-        );
-        
-        if (result != null && 
-            result.getResultCode() == UHFReaderResult.ResultCode.CODE_SUCCESS) {
-            String data = result.getData();
-            if (data != null && !data.isEmpty()) {
-                Log.d(TAG, "Read success: " + data);
-                return data;
-            }
-        }
-        
-        // If we have EPC, try with SelectEntity filter
-        if (epc != null && !epc.isEmpty()) {
-            SelectEntity filter = new SelectEntity();
-            filter.setOption(4);  // 4=EPC filter (from demo)
-            filter.setAddress(32);  // EPC starts at word 2 (bit 32)
-            filter.setLength(epc.length() * 4);  // bits = hex chars * 4
-            filter.setData(epc);
-            
-            result = uhfReader.read(
-                DEFAULT_PASSWORD, 
-                memBank, 
-                startAddr, 
-                wordCount, 
-                filter
-            );
-            
-            if (result != null && 
-                result.getResultCode() == UHFReaderResult.ResultCode.CODE_SUCCESS) {
-                String data = result.getData();
-                if (data != null && !data.isEmpty()) {
-                    Log.d(TAG, "Filtered read success: " + data);
-                    return data;
-                }
-            }
-        }
-        
-    } catch (Exception e) {
-        Log.e(TAG, "Read error for bank " + memBank + ": " + e.getMessage(), e);
-    }
-    
-    return "";
-}
+**File: `android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml`**
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background"/>
+    <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+</adaptive-icon>
 ```
 
-### Step 3: Remove Unused Reflection Methods
+### Step 2: Apply Splash Theme to Activity
 
-Delete these methods as they're no longer needed:
-- `tryDocumentedReadMethod()` 
-- `tryReadWithFilterEntity()`
-- `trySetEpcOnEntity()`
-- `tryReadWithReflectionDiscovery()` (parts of it)
-- `getParamTypesString()`
+**File: `android/app/src/main/AndroidManifest.xml`**
 
-### Step 4: Update extractHexFromResult
+Change the activity theme from `AppTheme.NoActionBar` to `AppTheme.Splash`:
 
-Simplify since we now know it returns `String`:
-
-```java
-private String extractHexFromResult(Object result) {
-    if (result == null) return "";
-    
-    // UHFReaderResult<String> - getData() returns String directly
-    if (result instanceof UHFReaderResult) {
-        try {
-            UHFReaderResult<?> uhfResult = (UHFReaderResult<?>) result;
-            Object data = uhfResult.getData();
-            if (data instanceof String) {
-                return (String) data;
-            } else if (data instanceof byte[]) {
-                return bytesToHex((byte[]) data);
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "extractHexFromResult error: " + e.getMessage());
-        }
-    }
-    
-    return result.toString();
-}
+```xml
+<activity
+    android:name=".MainActivity"
+    android:exported="true"
+    android:launchMode="singleTask"
+    android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+    android:screenOrientation="portrait"
+    android:theme="@style/AppTheme.Splash">
 ```
+
+The `postSplashScreenTheme` in `styles.xml` is already configured to transition to `AppTheme.NoActionBar` after the splash.
 
 ---
 
 ## Files to Modify
 
-**android/app/src/main/java/com/mivanta/rfid/MivantaRfidPlugin.java**
-- Add `SelectEntity` import
-- Rewrite `tryReadMemoryBankDirect()` to use direct API call
-- Remove unused reflection helper methods
-- Update debug logging
+| File | Change |
+|------|--------|
+| `android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml` | Fix foreground to `@drawable/ic_launcher_foreground` |
+| `android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml` | Fix foreground to `@drawable/ic_launcher_foreground` |
+| `android/app/src/main/AndroidManifest.xml` | Change activity theme to `@style/AppTheme.Splash` |
 
 ---
 
-## Expected Outcome
+## Expected Result
 
-After implementation:
-1. **TID field** will populate with the chip identifier (24 hex characters)
-2. **User Data field** will populate with stored vehicle data (if present)
-3. **Faster reads** - no reflection overhead, direct SDK calls
-4. **Better error messages** - using proper `getResultCode()` checks
+After these changes:
+1. **App Icon**: Shows your Impact ATMS logo on the dark slate (#464660) background
+2. **Splash Screen**: Displays `splash_logo.png` centered on the #464660 background for 1 second before transitioning to the app
 
 ---
 
 ## Testing Steps
 
-1. Build and deploy the updated APK
-2. Connect to the RFID reader
-3. Press the hardware trigger button on a FASTag
-4. Verify TID and User data fields now show hex values
-5. Check the Debug panel for any error messages if fields are still empty
+1. Pull the changes to your local project
+2. Run `npx cap sync android`
+3. Build and install the APK
+4. Verify the app icon in the launcher shows Impact ATMS logo
+5. Launch the app and confirm the splash screen appears with your logo
