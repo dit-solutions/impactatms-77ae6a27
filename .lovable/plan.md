@@ -1,107 +1,117 @@
 
 
-## Native Handheld RFID Integration Plan
-### Mivanta CX1500N UHF Reader + Your Toll Automation PWA
+## GitHub Actions - Automatic Android APK Build
+
+### What This Gives You
+
+A fully automated build system where:
+1. You push code to GitHub → APK is automatically built in the cloud
+2. No Android Studio required on your computer
+3. Download the ready-to-install APK directly from GitHub
+4. Works every time you push changes
 
 ---
 
-### What We're Building
+### How It Works
 
-A native Android wrapper for your existing toll automation web app that integrates directly with the Mivanta CX1500N UHF RFID handheld reader, enabling both **single-tap reads** and **continuous inventory scanning**.
-
----
-
-### Phase 1: Capacitor Android Setup
-
-**Goal:** Convert your PWA into a native Android app
-
-- Install Capacitor core dependencies
-- Configure the app for deployment on the CX1500N device
-- Set up hot-reload so you can test while developing
-- Create project structure for SDK integration
-
-**What you'll experience:** Your existing web app running inside an Android container, ready for native SDK integration.
+```text
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│    Lovable      │     │     GitHub      │     │  Your CX1500N   │
+│  (Edit Code)    │────▶│ (Auto-Build APK)│────▶│  (Install APK)  │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+        │                       │                       │
+   Export/Push            5 min build           Download & Install
+```
 
 ---
 
-### Phase 2: Custom RFID Bridge Plugin
+### What I'll Create
 
-**Goal:** Create a Capacitor plugin to communicate with the Mivanta SDK
+**1. GitHub Actions Workflow File**
+   - `.github/workflows/android-build.yml`
+   - Triggers on every push to main branch
+   - Sets up Java 17 and Android SDK automatically
+   - Builds the web app, syncs to Android, compiles APK
+   - Uploads the APK as a downloadable "artifact"
 
-Based on the API documentation you provided, we'll build a bridge plugin with:
+**2. Production Capacitor Config**
+   - Modified config that works offline (no hot-reload dependency)
+   - Ensures the APK works standalone on your device
 
-**Connection Management:**
-- Initialize connection to the UHF module when app starts
-- Properly disconnect when app closes (prevents battery drain)
+**3. Gradle Build Files**
+   - `android/build.gradle` - Project-level configuration
+   - `android/app/build.gradle` - App configuration with SDK support
+   - `android/settings.gradle` - Project settings
+   - `android/gradle.properties` - Build properties
+   - `android/local.properties` - SDK location template
 
-**Single Tag Read (Button Mode):**
-- Trigger a single read when user taps a button
-- Returns one EPC tag immediately
-- Perfect for targeted vehicle identification
-
-**Continuous Inventory (Scanning Mode):**
-- Start/stop continuous multi-tag scanning
-- Real-time callbacks as tags are detected
-- Ideal for batch scanning or monitoring
-
-**Power Control:**
-- Adjust read power (useful for range control at toll stations)
-
----
-
-### Phase 3: Web App Integration
-
-**Goal:** Connect the native RFID capabilities to your existing toll workflow
-
-**JavaScript Service Layer:**
-- `RfidService.connect()` - Initialize reader on app startup
-- `RfidService.readSingle()` - Single button-triggered read
-- `RfidService.startContinuous()` / `stopContinuous()` - Inventory mode
-- Event listeners for incoming tag data
-
-**Data Flow:**
-1. Tag is scanned by handheld reader
-2. Mivanta SDK captures EPC data
-3. Capacitor plugin passes to JavaScript
-4. Your web app receives the tag ID
-5. Your app sends to existing API
-6. API processes (boom barrier, logging, etc.)
+**4. Android Manifest**
+   - Required permissions for RFID operations
+   - App configuration for the CX1500N device
 
 ---
 
-### Phase 4: UI Controls
+### After Setup: Your Simple Steps
 
-**Goal:** User-friendly controls for the handheld operators
+**Step 1: Export to GitHub**
+- Click the GitHub button in Lovable
+- Export to a new repository
 
-- Mode toggle: Switch between single-read and continuous modes
-- Connection status indicator (connected/disconnected)
-- Visual feedback when tags are detected
-- Power adjustment slider (if needed for range tuning)
-- Tag read history/log view
+**Step 2: Add Your SDK Files**
+Upload these files to GitHub (via the web interface):
+- Your Mivanta `.jar` file → `android/app/libs/` folder
+- Your `.so` files → `android/app/src/main/jniLibs/arm64-v8a/` folder
+
+**Step 3: Wait ~5 Minutes**
+GitHub will automatically build your APK
+
+**Step 4: Download APK**
+- Go to your GitHub repository
+- Click "Actions" tab
+- Click the latest workflow run
+- Download "app-debug.apk" from Artifacts section
+
+**Step 5: Install on Device**
+- Transfer APK to your CX1500N (USB or file transfer)
+- Open and install (enable "Install from unknown sources" if prompted)
 
 ---
 
-### After Implementation: Your Setup Steps
+### Files to Be Created
 
-Since native Android code requires local compilation, here's what you'll do:
-
-1. **Export project to GitHub** (using Lovable's export feature)
-2. **Clone locally** and open in Android Studio
-3. **Add Mivanta SDK files** (the JAR from `CX1500N_Jar_file.zip`) to `android/app/libs/`
-4. **Add .so files** to `android/app/src/main/jniLibs/`
-5. **Build and deploy** to your CX1500N device
-6. **Test** with actual RFID tags
-
-I'll provide detailed step-by-step instructions for each part!
+| File | Purpose |
+|------|---------|
+| `.github/workflows/android-build.yml` | Main build automation script |
+| `android/build.gradle` | Project Gradle configuration |
+| `android/app/build.gradle` | App dependencies & SDK setup |
+| `android/settings.gradle` | Project module settings |
+| `android/gradle.properties` | JVM and build settings |
+| `android/local.properties` | SDK location (template) |
+| `android/app/src/main/AndroidManifest.xml` | App permissions & config |
+| `android/gradle/wrapper/gradle-wrapper.properties` | Gradle version |
 
 ---
 
-### Deliverables
+### Technical Details
 
-✅ Capacitor project configuration for Android  
-✅ Custom `MivantaRfidPlugin` bridging web ↔ native SDK  
-✅ JavaScript `RfidService` for your toll app to use  
-✅ UI components for reader control  
-✅ Complete integration guide with SDK setup steps  
-✅ Error handling for connection issues
+**Build Environment (GitHub-hosted runner):**
+- Ubuntu latest
+- Java 17 (Temurin distribution)
+- Android SDK with build-tools 34
+- Node.js 18 for web build
+
+**Build Steps:**
+1. Checkout code
+2. Set up Java 17
+3. Set up Android SDK
+4. Install npm dependencies
+5. Build web app (`npm run build`)
+6. Sync to Android (`npx cap sync android`)
+7. Build APK with Gradle (`./gradlew assembleDebug`)
+8. Upload APK as artifact
+
+**SDK Integration Ready:**
+- The `build.gradle` will include `implementation fileTree(dir: 'libs', include: ['*.jar'])`
+- Native `.so` files are automatically included from `jniLibs/`
+- You just need to upload your vendor files to the right folders
 
