@@ -2,6 +2,9 @@ package app.lovable.f68cb15949ce434d93731abbed2b0512;
 
 import android.os.Bundle;
 import android.view.KeyEvent;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
+import androidx.core.splashscreen.SplashScreen;
 import com.getcapacitor.BridgeActivity;
 import com.mivanta.rfid.MivantaRfidPlugin;
 
@@ -11,6 +14,21 @@ public class MainActivity extends BridgeActivity {
     
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // Install splash screen with animation before calling super
+        SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
+        
+        // Set a custom exit animation
+        splashScreen.setOnExitAnimationListener(splashScreenView -> {
+            // Create fade out animation
+            splashScreenView.getIconView().animate()
+                .alpha(0f)
+                .scaleX(1.1f)
+                .scaleY(1.1f)
+                .setDuration(300)
+                .withEndAction(splashScreenView::remove)
+                .start();
+        });
+        
         // Register the custom RFID plugin
         registerPlugin(MivantaRfidPlugin.class);
         super.onCreate(savedInstanceState);
