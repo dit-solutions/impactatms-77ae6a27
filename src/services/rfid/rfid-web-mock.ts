@@ -6,7 +6,8 @@ import type {
   TagDetailsResult,
   ScanningResult, 
   PowerResult, 
-  RfidStatus 
+  RfidStatus,
+  DebugInfoResult
 } from './mivanta-rfid-plugin';
 
 type ListenerCallback = (data: RfidTagData) => void;
@@ -169,6 +170,15 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
       connected: this.connected,
       scanning: this.scanning,
       power: this.power
+    };
+  }
+
+  async getDebugInfo(): Promise<DebugInfoResult> {
+    return {
+      sdkAvailable: true,
+      nativeLibsLoaded: true,
+      isConnected: this.connected,
+      methods: 'Web Mock - No native SDK methods available\n\nThis is a browser simulation. Deploy to a real device to see actual SDK methods.'
     };
   }
 

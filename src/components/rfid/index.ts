@@ -5,3 +5,4 @@ export { RfidModeSwitch } from './RfidModeSwitch';
 export { RfidPowerSlider } from './RfidPowerSlider';
 export { RfidTagHistory } from './RfidTagHistory';
 export { FastTagHistory } from './FastTagHistory';
+export { RfidDebugPanel } from './RfidDebugPanel';

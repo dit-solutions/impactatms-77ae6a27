@@ -1,4 +1,4 @@
-import MivantaRfid, { RfidTagData, RfidStatus, FastTagData } from './mivanta-rfid-plugin';
+import MivantaRfid, { RfidTagData, RfidStatus, FastTagData, DebugInfoResult } from './mivanta-rfid-plugin';
 
 export type RfidReadMode = 'single' | 'continuous';
 
@@ -250,6 +250,23 @@ class RfidService {
   }
 
   /**
+   * Get debug information from native SDK
+   */
+  async getDebugInfo(): Promise<DebugInfoResult> {
+    try {
+      return await MivantaRfid.getDebugInfo();
+    } catch (error) {
+      console.error('RFID Service: Get debug info failed', error);
+      return {
+        sdkAvailable: false,
+        nativeLibsLoaded: false,
+        isConnected: false,
+        methods: 'Error getting debug info: ' + String(error)
+      };
+    }
+  }
+
+  /**
    * Set up listener for tag detection events
    */
   private async setupTagListener(): Promise<void> {
@@ -270,4 +287,4 @@ export const rfidService = RfidService.getInstance();
 export default rfidService;
 
 // Re-export types
-export type { RfidTagData, RfidStatus, FastTagData };
+export type { RfidTagData, RfidStatus, FastTagData, DebugInfoResult };

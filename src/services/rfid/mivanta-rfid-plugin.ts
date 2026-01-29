@@ -83,6 +83,16 @@ export interface PowerResult {
 }
 
 /**
+ * Debug info result from native SDK
+ */
+export interface DebugInfoResult {
+  sdkAvailable: boolean;
+  nativeLibsLoaded: boolean;
+  isConnected: boolean;
+  methods: string;
+}
+
+/**
  * Mivanta RFID Plugin Interface
  * Defines the contract between JavaScript and native Android code
  */
@@ -129,6 +139,11 @@ export interface MivantaRfidPlugin {
    * Get current connection and scanning status
    */
   getStatus(): Promise<RfidStatus>;
+  
+  /**
+   * Get debug information from native SDK (methods, status)
+   */
+  getDebugInfo(): Promise<DebugInfoResult>;
   
   /**
    * Add listener for tag detection events
