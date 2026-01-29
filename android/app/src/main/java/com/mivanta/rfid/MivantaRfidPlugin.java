@@ -42,19 +42,43 @@ public class MivantaRfidPlugin extends Plugin {
     @PluginMethod
     public void connect(PluginCall call) {
         try {
+            Log.d(TAG, "connect() called");
             if (uhfReader == null) {
                 uhfReader = UHFReader.getInstance();
+            }
+
+            if (uhfReader == null) {
+                Log.e(TAG, "UHFReader.getInstance() returned null");
+                call.reject("UHF reader not available (getInstance returned null)");
+                return;
             }
             
             // Connect using Android Context
             UHFReaderResult<Boolean> result = uhfReader.connect(getContext());
+
+            if (result == null) {
+                Log.e(TAG, "uhfReader.connect(...) returned null result");
+                call.reject("Failed to connect: null result from SDK");
+                return;
+            }
+
             Boolean success = result.getData();
             
             if (success != null && success) {
                 isConnected = true;
-                
-                // Set default power level
-                uhfReader.setPower(currentPower);
+
+                // Best-effort: set default power level (do not crash if SDK returns error)
+                try {
+                    UHFReaderResult<Boolean> powerResult = uhfReader.setPower(currentPower);
+                    if (powerResult == null) {
+                        Log.w(TAG, "setPower returned null result");
+                    } else {
+                        Log.d(TAG, "setPower(" + currentPower + ") => code=" + powerResult.getResultCode() + ", msg=" + powerResult.getMessage());
+                    }
+                } catch (Throwable t) {
+                    // Use Throwable to catch UnsatisfiedLinkError and other linkage issues
+                    Log.e(TAG, "setPower threw: " + t.getMessage(), t);
+                }
                 
                 JSObject response = new JSObject();
                 response.put("connected", true);
@@ -67,9 +91,10 @@ public class MivantaRfidPlugin extends Plugin {
                 Log.e(TAG, "Failed to connect: " + errorMsg);
                 call.reject("Failed to connect to UHF Reader: " + errorMsg);
             }
-        } catch (Exception e) {
-            Log.e(TAG, "Connection error: " + e.getMessage(), e);
-            call.reject("Connection error: " + e.getMessage());
+        } catch (Throwable t) {
+            // Throwable to catch native linkage errors that would otherwise crash the app
+            Log.e(TAG, "Connection fatal error: " + t.getMessage(), t);
+            call.reject("Connection error: " + t.getMessage());
         }
     }
 
