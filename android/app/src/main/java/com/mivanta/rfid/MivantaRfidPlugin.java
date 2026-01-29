@@ -623,28 +623,53 @@ public class MivantaRfidPlugin extends Plugin {
     }
     
     /**
-     * Try the documented 6-parameter Read method from SDK API
-     * Read(password, membank, address, wordCount, specifyLabel, filterEntity)
+     * Try to read memory bank using reflection to find the correct Read method signature
+     * The SDK's Read method may have different signatures depending on version
      */
     private String tryDocumentedReadMethod(int memBank, int startAddr, int wordCount, String epc) {
         try {
-            // First try: Read without filter (specifyLabel=false, filterEntity=null)
-            Log.d(TAG, "Trying Read(password, bank, addr, words, false, null)");
+            Method[] methods = UHFReader.class.getDeclaredMethods();
             
-            UHFReaderResult<?> readResult = uhfReader.Read(
-                DEFAULT_PASSWORD,  // "00000000"
-                memBank,           // 2 for TID, 3 for USER
-                startAddr,         // typically 0
-                wordCount,         // number of words
-                false,             // specifyLabel - don't filter
-                null               // filterEntity - null for no filter
-            );
-            
-            if (readResult != null) {
-                Log.d(TAG, "Read returned: code=" + readResult.getCode() + ", msg=" + readResult.getMessage());
-                if (readResult.getData() != null) {
+            for (Method method : methods) {
+                String name = method.getName();
+                // Look specifically for "Read" method (case-sensitive as per SDK docs)
+                if (!name.equals("Read") && !name.equals("read")) continue;
+                
+                Class<?>[] paramTypes = method.getParameterTypes();
+                Log.d(TAG, "Found Read method with " + paramTypes.length + " params: " + getParamTypesString(paramTypes));
+                
+                Object readResult = null;
+                
+                try {
+                    // Try 6-param: Read(password, membank, address, wordCount, specifyLabel, filterEntity)
+                    if (paramTypes.length == 6) {
+                        readResult = method.invoke(uhfReader, DEFAULT_PASSWORD, memBank, startAddr, wordCount, false, null);
+                    }
+                    // Try 5-param: Read(password, membank, address, wordCount, filterEntity)
+                    else if (paramTypes.length == 5) {
+                        readResult = method.invoke(uhfReader, DEFAULT_PASSWORD, memBank, startAddr, wordCount, null);
+                    }
+                    // Try 4-param: Read(password, membank, address, wordCount)
+                    else if (paramTypes.length == 4 && paramTypes[0] == String.class) {
+                        readResult = method.invoke(uhfReader, DEFAULT_PASSWORD, memBank, startAddr, wordCount);
+                    }
+                    // Try 4-param alternate: Read(membank, address, wordCount, password)
+                    else if (paramTypes.length == 4 && paramTypes[0] == int.class) {
+                        readResult = method.invoke(uhfReader, memBank, startAddr, wordCount, DEFAULT_PASSWORD);
+                    }
+                    // Try 3-param: Read(membank, address, wordCount)
+                    else if (paramTypes.length == 3) {
+                        readResult = method.invoke(uhfReader, memBank, startAddr, wordCount);
+                    }
+                } catch (Exception e) {
+                    Log.d(TAG, "Read method invoke failed: " + e.getMessage());
+                    continue;
+                }
+                
+                if (readResult != null) {
                     String hex = extractHexFromResult(readResult);
                     if (hex != null && !hex.isEmpty() && !hex.matches("^0+$")) {
+                        Log.d(TAG, "Read success with " + paramTypes.length + "-param Read: " + hex);
                         return hex;
                     }
                 }
@@ -655,8 +680,18 @@ public class MivantaRfidPlugin extends Plugin {
         return "";
     }
     
+    private String getParamTypesString(Class<?>[] params) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < params.length; i++) {
+            if (i > 0) sb.append(", ");
+            sb.append(params[i].getSimpleName());
+        }
+        return sb.toString();
+    }
+    
     /**
      * Try reading with a filter entity to target a specific tag by EPC
+     * Uses reflection to find the correct method signature
      */
     private String tryReadWithFilterEntity(int memBank, int startAddr, int wordCount, String epc) {
         if (epc == null || epc.isEmpty()) {
@@ -669,26 +704,37 @@ public class MivantaRfidPlugin extends Plugin {
             boolean epcSet = trySetEpcOnEntity(filterEntity, epc);
             
             if (!epcSet) {
-                Log.w(TAG, "Could not set EPC on filter entity");
+                Log.w(TAG, "Could not set EPC on filter entity, skipping filtered read");
                 return "";
             }
             
-            Log.d(TAG, "Trying Read with filter entity for EPC: " + epc);
+            Method[] methods = UHFReader.class.getDeclaredMethods();
             
-            UHFReaderResult<?> readResult = uhfReader.Read(
-                DEFAULT_PASSWORD,
-                memBank,
-                startAddr,
-                wordCount,
-                true,           // specifyLabel - filter to specific tag
-                filterEntity    // filterEntity with EPC set
-            );
-            
-            if (readResult != null) {
-                Log.d(TAG, "Filtered Read returned: code=" + readResult.getCode() + ", msg=" + readResult.getMessage());
-                if (readResult.getData() != null) {
+            for (Method method : methods) {
+                String name = method.getName();
+                if (!name.equals("Read") && !name.equals("read")) continue;
+                
+                Class<?>[] paramTypes = method.getParameterTypes();
+                Object readResult = null;
+                
+                try {
+                    // Try 6-param with filter: Read(password, membank, address, wordCount, specifyLabel, filterEntity)
+                    if (paramTypes.length == 6 && paramTypes[5] == UHFTagEntity.class) {
+                        readResult = method.invoke(uhfReader, DEFAULT_PASSWORD, memBank, startAddr, wordCount, true, filterEntity);
+                    }
+                    // Try 5-param with filter: Read(password, membank, address, wordCount, filterEntity)
+                    else if (paramTypes.length == 5 && paramTypes[4] == UHFTagEntity.class) {
+                        readResult = method.invoke(uhfReader, DEFAULT_PASSWORD, memBank, startAddr, wordCount, filterEntity);
+                    }
+                } catch (Exception e) {
+                    Log.d(TAG, "Filtered Read method invoke failed: " + e.getMessage());
+                    continue;
+                }
+                
+                if (readResult != null) {
                     String hex = extractHexFromResult(readResult);
                     if (hex != null && !hex.isEmpty() && !hex.matches("^0+$")) {
+                        Log.d(TAG, "Filtered Read success: " + hex);
                         return hex;
                     }
                 }
