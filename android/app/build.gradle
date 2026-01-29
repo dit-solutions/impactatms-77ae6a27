@@ -2,7 +2,7 @@ apply plugin: 'com.android.application'
 
 android {
     namespace "app.lovable.f68cb15949ce434d93731abbed2b0512"
-    compileSdk 34
+    compileSdk 36
     
     defaultConfig {
         applicationId "app.lovable.f68cb15949ce434d93731abbed2b0512"
