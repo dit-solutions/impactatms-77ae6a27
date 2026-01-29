@@ -1,154 +1,75 @@
 
-## Extended FASTag Data Reading
 
-### Understanding Your Requirement
+# Fix App Icon and Splash Screen to Use Actual Logo
 
-You're reading FASTags (Indian toll RFID tags) and currently only getting the basic inventory data. To get the complete FASTag information, we need to read from multiple memory banks:
+## Problem Identified
 
-| Data Type | Memory Bank | Description |
-|-----------|-------------|-------------|
-| TID | Bank 2 (TID) | Tag Identifier - unique chip ID |
-| EPC ID | Bank 1 (EPC) | Electronic Product Code - vehicle identifier |
-| User Data | Bank 3 (User) | Custom data stored on the tag |
+The app icon and splash screen are showing incorrect/different icons because:
 
----
+1. **Vector XML recreations** were made instead of using your actual uploaded logo PNGs
+2. The old **mipmap icon files** still contain the default blue Capacitor icon (blue circle with plus sign)
+3. Your actual logo files exist in `src/assets/` but aren't being used for Android native resources
 
-### Changes Required
+## Solution
 
-#### 1. Update Native Plugin (Java)
-**File**: `android/app/src/main/java/com/mivanta/rfid/MivantaRfidPlugin.java`
-
-Add a new method `readTagDetails()` that reads all memory banks:
-
-```java
-@PluginMethod
-public void readTagDetails(PluginCall call) {
-    // 1. First perform inventory to get the tag EPC
-    // 2. Use uhfReader.readTagData() to read TID bank
-    // 3. Use uhfReader.readTagData() to read User bank
-    // 4. Return combined data: { tid, epc, userData, rssi, timestamp }
-}
-```
-
-The Mivanta SDK should have a method like:
-- `readTagData(bank, startAddress, length, accessPassword)` or similar
+Replace the vector XML icons with your actual Impact ATMS logo (the orange "A" road mark) in proper PNG format at all required Android sizes.
 
 ---
 
-#### 2. Update TypeScript Plugin Interface
-**File**: `src/services/rfid/mivanta-rfid-plugin.ts`
+## Implementation Steps
 
-Add new interfaces and method:
+### Step 1: Generate Android App Icon PNGs
 
-```typescript
-export interface FastTagData {
-  tid: string;           // First 24 chars - Tag Identifier
-  epc: string;           // EPC ID (24 chars starting with 'E')
-  userData: string;      // User memory bank data
-  rssi?: number;
-  timestamp: number;
-}
+Create proper PNG app icons from your logo at all required Android densities:
 
-interface MivantaRfidPlugin {
-  // ... existing methods ...
-  
-  /**
-   * Read complete FASTag data including TID, EPC, and User memory
-   */
-  readTagDetails(): Promise<FastTagReadResult>;
-}
-```
+| Density | Size | Folder |
+|---------|------|--------|
+| mdpi | 48x48px | mipmap-mdpi |
+| hdpi | 72x72px | mipmap-hdpi |
+| xhdpi | 96x96px | mipmap-xhdpi |
+| xxhdpi | 144x144px | mipmap-xxhdpi |
+| xxxhdpi | 192x192px | mipmap-xxxhdpi |
 
----
+**Adaptive Icon Foreground** (for Android 8.0+):
+- Size: 108x108dp with 72dp safe zone centered
+- Will use brand colors as background (#464660)
 
-#### 3. Update Service Layer
-**File**: `src/services/rfid/rfid-service.ts`
+### Step 2: Create Splash Screen Drawable
 
-Add method to read extended tag data:
+Replace `splash_icon.xml` with a proper PNG-based splash using your actual logo.
 
-```typescript
-async readTagDetails(): Promise<FastTagData | null> {
-  const result = await MivantaRfid.readTagDetails();
-  // Parse and return structured FASTag data
-}
-```
+### Step 3: Update Mipmap Resources
+
+Replace the existing XML vector icons in mipmap folders with PNG versions:
+- `ic_launcher.png` - Standard icon
+- `ic_launcher_round.png` - Round icon variant
+- `ic_launcher_foreground.png` - Foreground layer for adaptive icons
+
+### Step 4: Update Adaptive Icon Configuration
+
+Ensure `mipmap-anydpi-v26/ic_launcher.xml` references the PNG foreground correctly with your brand background color (#464660).
 
 ---
 
-#### 4. Update UI Components
-**File**: `src/components/rfid/RfidTagHistory.tsx`
+## Files to be Modified/Created
 
-Update to display parsed FASTag fields:
-
-```text
-┌─────────────────────────────────────┐
-│ FASTag Detected                     │
-├─────────────────────────────────────┤
-│ TID:  E200 3411 2345 6789 ABCD EF01 │
-│ EPC:  3034 0102 8765 4321 FEDC BA98 │
-│ User: 4D48 4152 4153 4854 5241 ...  │
-│ RSSI: -42 dBm          12:34:56 PM  │
-└─────────────────────────────────────┘
-```
+| File | Action |
+|------|--------|
+| `android/app/src/main/res/mipmap-mdpi/ic_launcher.png` | Replace with 48x48 logo |
+| `android/app/src/main/res/mipmap-hdpi/ic_launcher.png` | Replace with 72x72 logo |
+| `android/app/src/main/res/mipmap-xhdpi/ic_launcher.png` | Replace with 96x96 logo |
+| `android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png` | Replace with 144x144 logo |
+| `android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png` | Replace with 192x192 logo |
+| Same pattern for `ic_launcher_round.png` | All densities |
+| `android/app/src/main/res/drawable/ic_launcher_foreground.png` | 432x432 foreground |
+| `android/app/src/main/res/drawable/splash.png` | Splash screen logo |
 
 ---
 
-#### 5. Update Web Mock
-**File**: `src/services/rfid/rfid-web-mock.ts`
+## Visual Result
 
-Add mock implementation for testing in browser preview.
+After implementation:
+- **App Icon**: Your actual Impact ATMS orange "A" road mark logo on dark gray (#464660) background
+- **Splash Screen**: Your full Impact ATMS logo centered on branded background
+- **Consistent branding** across installation, home screen, and app launch
 
----
-
-### Technical Details
-
-#### Memory Bank Reading (SDK-specific)
-
-Most UHF SDKs use a pattern like:
-```java
-// Read TID bank (bank 2), starting at word 0, read 6 words (12 bytes = 24 hex chars)
-UHFReaderResult<byte[]> tidResult = uhfReader.readTagData(
-    epcHex,           // Tag to read (from inventory)
-    2,                // Memory bank (2 = TID)
-    0,                // Start address (word offset)
-    6,                // Word count
-    "00000000"        // Access password (default)
-);
-
-// Read User bank (bank 3)
-UHFReaderResult<byte[]> userResult = uhfReader.readTagData(
-    epcHex,
-    3,                // Memory bank (3 = User)
-    0,
-    16,               // Read 16 words (32 bytes)
-    "00000000"
-);
-```
-
-The exact method signature depends on the Mivanta SDK v1.1.0 API. Common method names:
-- `readTagData()`
-- `readData()`
-- `readMemory()`
-
----
-
-### Files to Modify
-
-| File | Changes |
-|------|---------|
-| `MivantaRfidPlugin.java` | Add `readTagDetails()` method with TID/User bank reads |
-| `mivanta-rfid-plugin.ts` | Add `FastTagData` interface and `readTagDetails()` |
-| `rfid-service.ts` | Add `readTagDetails()` service method |
-| `rfid-web-mock.ts` | Add mock for `readTagDetails()` |
-| `RfidTagHistory.tsx` | Update UI to display TID, EPC, User fields separately |
-| `use-rfid-reader.ts` | Add hook method for detailed read |
-
----
-
-### Important Note
-
-To implement the exact SDK calls, I need to know the Mivanta SDK v1.1.0 API for reading specific memory banks. Do you have:
-1. SDK documentation or sample code showing how to read TID/User banks?
-2. The method names available in `UHFReader` class for memory bank reads?
-
-This will ensure we use the correct API calls rather than guessing.
