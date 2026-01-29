@@ -17,7 +17,7 @@ public class MainActivity extends BridgeActivity {
     }
     
     @Override
-    protected void onResume() {
+    public void onResume() {
         super.onResume();
         // Get reference to the RFID plugin for key handling
         try {
