@@ -1,76 +1,154 @@
 
+## Extended FASTag Data Reading
 
-## Integrate Mivanta SDK AAR v1.1.0
+### Understanding Your Requirement
 
-The newer AAR file (`HCUHF_v1.1.0_20250620.aar`) has been uploaded and is now in the project. This is a significant improvement over the current JAR because an AAR (Android Archive) is a self-contained bundle that includes all Java classes, native `.so` libraries, and resources in one package.
+You're reading FASTags (Indian toll RFID tags) and currently only getting the basic inventory data. To get the complete FASTag information, we need to read from multiple memory banks:
 
-### What's Changing
+| Data Type | Memory Bank | Description |
+|-----------|-------------|-------------|
+| TID | Bank 2 (TID) | Tag Identifier - unique chip ID |
+| EPC ID | Bank 1 (EPC) | Electronic Product Code - vehicle identifier |
+| User Data | Bank 3 (User) | Custom data stored on the tag |
 
-**1. Update build.gradle to use AAR instead of JAR**
+---
 
-The current configuration only loads JAR files:
-```groovy
-implementation fileTree(dir: 'libs', include: ['*.jar'])
+### Changes Required
+
+#### 1. Update Native Plugin (Java)
+**File**: `android/app/src/main/java/com/mivanta/rfid/MivantaRfidPlugin.java`
+
+Add a new method `readTagDetails()` that reads all memory banks:
+
+```java
+@PluginMethod
+public void readTagDetails(PluginCall call) {
+    // 1. First perform inventory to get the tag EPC
+    // 2. Use uhfReader.readTagData() to read TID bank
+    // 3. Use uhfReader.readTagData() to read User bank
+    // 4. Return combined data: { tid, epc, userData, rssi, timestamp }
+}
 ```
 
-We'll update this to:
-- Include AAR files from the `libs` folder using `flatDir` repository
-- Remove the old v1.0.8 JAR since the AAR contains the same classes (and more)
+The Mivanta SDK should have a method like:
+- `readTagData(bank, startAddress, length, accessPassword)` or similar
 
-**2. Clean up libs folder**
+---
 
-- Keep: `HCUHF_v1.1.0_20250620.aar` (the new complete SDK)
-- Remove: `HCUHF_v1.0.8_20250102.jar` (superseded by the AAR)
+#### 2. Update TypeScript Plugin Interface
+**File**: `src/services/rfid/mivanta-rfid-plugin.ts`
 
-**3. Potentially simplify native library loading**
+Add new interfaces and method:
 
-Since AAR files can bundle their own native libraries, the SDK may now load its `.so` files automatically. We'll add a fallback check but keep the manual loading in case it's still needed.
+```typescript
+export interface FastTagData {
+  tid: string;           // First 24 chars - Tag Identifier
+  epc: string;           // EPC ID (24 chars starting with 'E')
+  userData: string;      // User memory bank data
+  rssi?: number;
+  timestamp: number;
+}
+
+interface MivantaRfidPlugin {
+  // ... existing methods ...
+  
+  /**
+   * Read complete FASTag data including TID, EPC, and User memory
+   */
+  readTagDetails(): Promise<FastTagReadResult>;
+}
+```
+
+---
+
+#### 3. Update Service Layer
+**File**: `src/services/rfid/rfid-service.ts`
+
+Add method to read extended tag data:
+
+```typescript
+async readTagDetails(): Promise<FastTagData | null> {
+  const result = await MivantaRfid.readTagDetails();
+  // Parse and return structured FASTag data
+}
+```
+
+---
+
+#### 4. Update UI Components
+**File**: `src/components/rfid/RfidTagHistory.tsx`
+
+Update to display parsed FASTag fields:
+
+```text
+┌─────────────────────────────────────┐
+│ FASTag Detected                     │
+├─────────────────────────────────────┤
+│ TID:  E200 3411 2345 6789 ABCD EF01 │
+│ EPC:  3034 0102 8765 4321 FEDC BA98 │
+│ User: 4D48 4152 4153 4854 5241 ...  │
+│ RSSI: -42 dBm          12:34:56 PM  │
+└─────────────────────────────────────┘
+```
+
+---
+
+#### 5. Update Web Mock
+**File**: `src/services/rfid/rfid-web-mock.ts`
+
+Add mock implementation for testing in browser preview.
 
 ---
 
 ### Technical Details
 
-#### File Changes
+#### Memory Bank Reading (SDK-specific)
 
-**`android/app/build.gradle`**
-```text
-Change:
-  implementation fileTree(dir: 'libs', include: ['*.jar'])
+Most UHF SDKs use a pattern like:
+```java
+// Read TID bank (bank 2), starting at word 0, read 6 words (12 bytes = 24 hex chars)
+UHFReaderResult<byte[]> tidResult = uhfReader.readTagData(
+    epcHex,           // Tag to read (from inventory)
+    2,                // Memory bank (2 = TID)
+    0,                // Start address (word offset)
+    6,                // Word count
+    "00000000"        // Access password (default)
+);
 
-To:
-  // Include AAR files from libs folder
-  implementation(name: 'HCUHF_v1.1.0_20250620', ext: 'aar')
-  // Include any remaining JAR files (for future additions)
-  implementation fileTree(dir: 'libs', include: ['*.jar'])
+// Read User bank (bank 3)
+UHFReaderResult<byte[]> userResult = uhfReader.readTagData(
+    epcHex,
+    3,                // Memory bank (3 = User)
+    0,
+    16,               // Read 16 words (32 bytes)
+    "00000000"
+);
 ```
 
-**`android/app/libs/`**
-- Delete `HCUHF_v1.0.8_20250102.jar` (no longer needed)
-
-**`android/app/src/main/java/com/mivanta/rfid/MivantaRfidPlugin.java`**
-- Update the `loadNativeLibraries()` method to only attempt manual loading if the AAR's bundled libraries aren't automatically available
-- Add improved error logging to capture any API differences in v1.1.0
+The exact method signature depends on the Mivanta SDK v1.1.0 API. Common method names:
+- `readTagData()`
+- `readData()`
+- `readMemory()`
 
 ---
 
-### Why This Should Fix the Build
+### Files to Modify
 
-The original `NoClassDefFoundError` for `UHFReaderSLR` and `HcPowerCtrl` occurred because:
-1. The standalone JAR (`v1.0.8`) only contained core classes
-2. Module-specific classes were in separate JARs that weren't present
-
-The AAR format bundles **all dependencies together**, including:
-- Core UHF classes (`UHFReader`, `UHFTagEntity`, etc.)
-- Module implementations (`UHFReaderSLR`, etc.)
-- Power control classes (`HcPowerCtrl`)
-- Pre-compiled native `.so` libraries
+| File | Changes |
+|------|---------|
+| `MivantaRfidPlugin.java` | Add `readTagDetails()` method with TID/User bank reads |
+| `mivanta-rfid-plugin.ts` | Add `FastTagData` interface and `readTagDetails()` |
+| `rfid-service.ts` | Add `readTagDetails()` service method |
+| `rfid-web-mock.ts` | Add mock for `readTagDetails()` |
+| `RfidTagHistory.tsx` | Update UI to display TID, EPC, User fields separately |
+| `use-rfid-reader.ts` | Add hook method for detailed read |
 
 ---
 
-### Build Verification
+### Important Note
 
-After these changes, the GitHub Actions build should:
-1. Compile without `NoClassDefFoundError`
-2. Package all native libraries correctly
-3. Produce a working APK that can connect to the RFID hardware
+To implement the exact SDK calls, I need to know the Mivanta SDK v1.1.0 API for reading specific memory banks. Do you have:
+1. SDK documentation or sample code showing how to read TID/User banks?
+2. The method names available in `UHFReader` class for memory bank reads?
 
+This will ensure we use the correct API calls rather than guessing.
