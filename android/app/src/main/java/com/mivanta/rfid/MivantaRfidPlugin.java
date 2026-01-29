@@ -101,14 +101,25 @@ public class MivantaRfidPlugin extends Plugin {
 
     @PluginMethod
     public void readSingle(PluginCall call) {
-        if (!isConnected) {
-            call.reject("Reader not connected");
+        if (!isConnected || uhfReader == null) {
+            call.reject("Reader not connected. Please connect first.");
             return;
         }
 
         try {
             // Perform single tag inventory
             UHFReaderResult<UHFTagEntity> result = uhfReader.singleTagInventory();
+            
+            if (result == null) {
+                JSObject response = new JSObject();
+                response.put("success", false);
+                response.put("epc", "");
+                response.put("timestamp", System.currentTimeMillis());
+                call.resolve(response);
+                Log.d(TAG, "Single read: null result");
+                return;
+            }
+            
             UHFTagEntity tag = result.getData();
             
             if (tag != null) {
