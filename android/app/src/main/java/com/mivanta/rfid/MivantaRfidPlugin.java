@@ -22,6 +22,15 @@ public class MivantaRfidPlugin extends Plugin {
 
     private static final String TAG = "MivantaRfidPlugin";
     
+    // Memory bank constants
+    private static final int MEMBANK_RESERVED = 0;  // Kill/Access passwords
+    private static final int MEMBANK_EPC = 1;       // EPC memory
+    private static final int MEMBANK_TID = 2;       // TID memory
+    private static final int MEMBANK_USER = 3;      // User memory
+    
+    // Default access password (no password)
+    private static final String DEFAULT_PASSWORD = "00000000";
+    
     private UHFReader uhfReader;
     private boolean isConnected = false;
     private boolean isScanning = false;
@@ -237,6 +246,142 @@ public class MivantaRfidPlugin extends Plugin {
             Log.e(TAG, "Single read error: " + e.getMessage(), e);
             call.reject("Read error: " + e.getMessage());
         }
+    }
+
+    /**
+     * Read complete FASTag details including TID, EPC, and User memory banks
+     * This performs an inventory first to get the tag, then reads additional memory banks
+     */
+    @PluginMethod
+    public void readTagDetails(PluginCall call) {
+        if (!isConnected || uhfReader == null) {
+            call.reject("Reader not connected. Please connect first.");
+            return;
+        }
+
+        try {
+            // Step 1: Perform single tag inventory to get EPC
+            UHFReaderResult<UHFTagEntity> inventoryResult = uhfReader.singleTagInventory();
+            
+            if (inventoryResult == null || inventoryResult.getData() == null) {
+                JSObject response = new JSObject();
+                response.put("success", false);
+                response.put("message", "No tag detected");
+                response.put("timestamp", System.currentTimeMillis());
+                call.resolve(response);
+                Log.d(TAG, "readTagDetails: No tag detected during inventory");
+                return;
+            }
+            
+            UHFTagEntity tag = inventoryResult.getData();
+            String epcFromInventory = tag.getEcpHex();
+            int rssi = tag.getRssi();
+            
+            Log.d(TAG, "readTagDetails: Tag found with EPC: " + epcFromInventory);
+            
+            // Step 2: Read TID memory bank (bank 2)
+            // TID is typically 12 bytes (6 words) = 24 hex characters
+            String tid = "";
+            try {
+                UHFReaderResult<byte[]> tidResult = uhfReader.Read(
+                    DEFAULT_PASSWORD,  // Access password
+                    MEMBANK_TID,       // Memory bank 2 (TID)
+                    0,                 // Start address (word 0)
+                    6,                 // Word count (6 words = 12 bytes = 24 hex chars)
+                    false,             // Don't specify tag filter
+                    null               // No filter entity
+                );
+                
+                if (tidResult != null && tidResult.getData() != null) {
+                    tid = bytesToHex(tidResult.getData());
+                    Log.d(TAG, "readTagDetails: TID read: " + tid);
+                } else {
+                    Log.w(TAG, "readTagDetails: TID read returned null or empty");
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "readTagDetails: Error reading TID: " + e.getMessage(), e);
+            }
+            
+            // Step 3: Read EPC memory bank (bank 1, starting at address 2)
+            // Address 0-1 are CRC and PC, actual EPC starts at address 2
+            // Typically 6 words (12 bytes = 24 hex chars) for standard EPC
+            String epc = "";
+            try {
+                UHFReaderResult<byte[]> epcResult = uhfReader.Read(
+                    DEFAULT_PASSWORD,  // Access password
+                    MEMBANK_EPC,       // Memory bank 1 (EPC)
+                    2,                 // Start address (skip CRC and PC at 0,1)
+                    6,                 // Word count (6 words = 12 bytes = 24 hex chars)
+                    false,             // Don't specify tag filter
+                    null               // No filter entity
+                );
+                
+                if (epcResult != null && epcResult.getData() != null) {
+                    epc = bytesToHex(epcResult.getData());
+                    Log.d(TAG, "readTagDetails: EPC read: " + epc);
+                } else {
+                    // Fallback to inventory EPC
+                    epc = epcFromInventory;
+                    Log.w(TAG, "readTagDetails: EPC read returned null, using inventory EPC");
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "readTagDetails: Error reading EPC: " + e.getMessage(), e);
+                epc = epcFromInventory; // Fallback
+            }
+            
+            // Step 4: Read User memory bank (bank 3)
+            // User memory size varies, try reading 16 words (32 bytes = 64 hex chars)
+            String userData = "";
+            try {
+                UHFReaderResult<byte[]> userResult = uhfReader.Read(
+                    DEFAULT_PASSWORD,  // Access password
+                    MEMBANK_USER,      // Memory bank 3 (User)
+                    0,                 // Start address
+                    16,                // Word count (16 words = 32 bytes = 64 hex chars)
+                    false,             // Don't specify tag filter
+                    null               // No filter entity
+                );
+                
+                if (userResult != null && userResult.getData() != null) {
+                    userData = bytesToHex(userResult.getData());
+                    Log.d(TAG, "readTagDetails: User data read: " + userData);
+                } else {
+                    Log.w(TAG, "readTagDetails: User data read returned null or empty");
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "readTagDetails: Error reading User memory: " + e.getMessage(), e);
+            }
+            
+            // Build response with all data
+            JSObject response = new JSObject();
+            response.put("success", true);
+            response.put("tid", tid);
+            response.put("epc", epc);
+            response.put("userData", userData);
+            response.put("rssi", rssi);
+            response.put("timestamp", System.currentTimeMillis());
+            
+            call.resolve(response);
+            Log.d(TAG, "readTagDetails: Complete - TID=" + tid + ", EPC=" + epc + ", User=" + userData);
+            
+        } catch (Exception e) {
+            Log.e(TAG, "readTagDetails error: " + e.getMessage(), e);
+            call.reject("Read tag details error: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Convert byte array to hex string
+     */
+    private String bytesToHex(byte[] bytes) {
+        if (bytes == null || bytes.length == 0) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02X", b));
+        }
+        return sb.toString();
     }
 
     @PluginMethod

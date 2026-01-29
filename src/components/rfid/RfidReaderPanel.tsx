@@ -2,12 +2,14 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Power, PowerOff, ScanLine, StopCircle, Scan } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Power, PowerOff, ScanLine, StopCircle, Scan, CreditCard } from 'lucide-react';
 import { useRfidReader } from '@/hooks/use-rfid-reader';
 import { RfidConnectionStatus } from './RfidConnectionStatus';
 import { RfidModeSwitch } from './RfidModeSwitch';
 import { RfidPowerSlider } from './RfidPowerSlider';
 import { RfidTagHistory } from './RfidTagHistory';
+import { FastTagHistory } from './FastTagHistory';
 import type { RfidTagData } from '@/services/rfid';
 
 interface RfidReaderPanelProps {
@@ -26,9 +28,11 @@ export function RfidReaderPanel({ onTagDetected, className }: RfidReaderPanelPro
     power,
     mode,
     tagHistory,
+    fastTagHistory,
     connect,
     disconnect,
     readSingle,
+    readTagDetails,
     startContinuous,
     stopContinuous,
     setPower,
@@ -90,30 +94,43 @@ export function RfidReaderPanel({ onTagDetected, className }: RfidReaderPanelPro
               disabled={isScanning}
             />
             
-            {/* Scan Button */}
-            <Button 
-              onClick={handleScanAction}
-              size="lg"
-              className="w-full h-14 text-lg"
-              variant={isScanning ? 'destructive' : 'default'}
-            >
-              {mode === 'single' ? (
-                <>
-                  <ScanLine className="h-5 w-5 mr-2" />
-                  Read Tag
-                </>
-              ) : isScanning ? (
-                <>
-                  <StopCircle className="h-5 w-5 mr-2" />
-                  Stop Scanning
-                </>
-              ) : (
-                <>
-                  <ScanLine className="h-5 w-5 mr-2" />
-                  Start Scanning
-                </>
-              )}
-            </Button>
+            {/* Scan Buttons */}
+            <div className="grid grid-cols-2 gap-2">
+              <Button 
+                onClick={handleScanAction}
+                size="lg"
+                className="h-14 text-base"
+                variant={isScanning ? 'destructive' : 'default'}
+              >
+                {mode === 'single' ? (
+                  <>
+                    <ScanLine className="h-5 w-5 mr-2" />
+                    Quick Read
+                  </>
+                ) : isScanning ? (
+                  <>
+                    <StopCircle className="h-5 w-5 mr-2" />
+                    Stop
+                  </>
+                ) : (
+                  <>
+                    <ScanLine className="h-5 w-5 mr-2" />
+                    Start Scan
+                  </>
+                )}
+              </Button>
+              
+              <Button 
+                onClick={readTagDetails}
+                size="lg"
+                className="h-14 text-base"
+                variant="secondary"
+                disabled={isScanning}
+              >
+                <CreditCard className="h-5 w-5 mr-2" />
+                Read Details
+              </Button>
+            </div>
             
             <Separator />
             
@@ -126,11 +143,33 @@ export function RfidReaderPanel({ onTagDetected, className }: RfidReaderPanelPro
             
             <Separator />
             
-            {/* Tag History */}
-            <RfidTagHistory
-              tags={tagHistory}
-              onClear={clearHistory}
-            />
+            {/* Tag History with Tabs */}
+            <Tabs defaultValue="fastag" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="fastag" className="text-xs">
+                  <CreditCard className="h-3 w-3 mr-1" />
+                  FASTag ({fastTagHistory.length})
+                </TabsTrigger>
+                <TabsTrigger value="basic" className="text-xs">
+                  <Scan className="h-3 w-3 mr-1" />
+                  Basic ({tagHistory.length})
+                </TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="fastag" className="mt-3">
+                <FastTagHistory
+                  tags={fastTagHistory}
+                  onClear={clearHistory}
+                />
+              </TabsContent>
+              
+              <TabsContent value="basic" className="mt-3">
+                <RfidTagHistory
+                  tags={tagHistory}
+                  onClear={clearHistory}
+                />
+              </TabsContent>
+            </Tabs>
           </>
         )}
       </CardContent>

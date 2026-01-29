@@ -3,6 +3,7 @@ import type {
   RfidTagData, 
   ConnectionResult, 
   SingleReadResult, 
+  TagDetailsResult,
   ScanningResult, 
   PowerResult, 
   RfidStatus 
@@ -21,12 +22,33 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
   private listeners: ListenerCallback[] = [];
   private scanInterval: ReturnType<typeof setInterval> | null = null;
 
-  private mockEpcs = [
-    'E200001234567890ABCD',
-    'E200009876543210EFGH', 
-    'E200005555666677778888',
-    'E20000AABBCCDDEEFF0011',
-    'E20000112233445566AABB'
+  // Mock FASTag data with realistic TID, EPC, and User data
+  private mockFastTags = [
+    {
+      tid: 'E200341234567890ABCD',
+      epc: '3034E28011052D1234567890',
+      userData: '4D48415241534854524131323334353637383930'
+    },
+    {
+      tid: 'E2003412FEDCBA987654',
+      epc: '3034E28011052D0987654321',
+      userData: '44454C4849313233343536373839304142434445'
+    },
+    {
+      tid: 'E20034AABBCCDD112233',
+      epc: '3034E28011052DAABBCCDDEE',
+      userData: '55505241353030313233343536373839414243'
+    },
+    {
+      tid: 'E200341122334455AABB',
+      epc: '3034E28011052D5566778899',
+      userData: '4752414A3132333435363738393041424344'
+    },
+    {
+      tid: 'E20034FFEEDDCCBBAA99',
+      epc: '3034E28011052DDEADBEEF12',
+      userData: '544E3132333435363738393041424344454647'
+    }
   ];
 
   async connect(): Promise<ConnectionResult> {
@@ -53,12 +75,35 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
     console.log('[RFID Mock] Single read...');
     await this.delay(300);
     
-    const epc = this.mockEpcs[Math.floor(Math.random() * this.mockEpcs.length)];
+    const tag = this.mockFastTags[Math.floor(Math.random() * this.mockFastTags.length)];
     return {
       success: true,
-      epc,
+      epc: tag.epc,
+      rssi: -45 + Math.floor(Math.random() * 20),
       timestamp: Date.now()
     };
+  }
+
+  async readTagDetails(): Promise<TagDetailsResult> {
+    if (!this.connected) {
+      throw new Error('Reader not connected');
+    }
+    
+    console.log('[RFID Mock] Reading tag details (TID/EPC/User)...');
+    await this.delay(800); // Longer delay for multi-bank read
+    
+    const tag = this.mockFastTags[Math.floor(Math.random() * this.mockFastTags.length)];
+    const result: TagDetailsResult = {
+      success: true,
+      tid: tag.tid,
+      epc: tag.epc,
+      userData: tag.userData,
+      rssi: -45 + Math.floor(Math.random() * 20),
+      timestamp: Date.now()
+    };
+    
+    console.log('[RFID Mock] Tag details:', result);
+    return result;
   }
 
   async startContinuous(): Promise<ScanningResult> {
@@ -76,8 +121,9 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
     // Simulate tag reads every 1.5-3 seconds
     this.scanInterval = setInterval(() => {
       if (this.scanning) {
+        const tag = this.mockFastTags[Math.floor(Math.random() * this.mockFastTags.length)];
         const tagData: RfidTagData = {
-          epc: this.mockEpcs[Math.floor(Math.random() * this.mockEpcs.length)],
+          epc: tag.epc,
           rssi: -45 + Math.floor(Math.random() * 20),
           count: 1,
           timestamp: Date.now()
