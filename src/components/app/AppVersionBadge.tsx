@@ -1,0 +1,89 @@
+import React, { useEffect } from 'react';
+import { useAppVersion } from '@/hooks/use-app-version';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { RefreshCw, Download, Smartphone, Globe } from 'lucide-react';
+
+interface AppVersionBadgeProps {
+  showUpdateCheck?: boolean;
+  className?: string;
+}
+
+export function AppVersionBadge({ showUpdateCheck = true, className = '' }: AppVersionBadgeProps) {
+  const { 
+    version, 
+    isNative, 
+    updateAvailable, 
+    isCheckingUpdate, 
+    checkUpdate, 
+    installUpdate 
+  } = useAppVersion();
+
+  // Auto-check for updates on mount (native only)
+  useEffect(() => {
+    if (isNative && showUpdateCheck) {
+      checkUpdate();
+    }
+  }, [isNative, showUpdateCheck]);
+
+  if (!version) {
+    return null;
+  }
+
+  return (
+    <div className={`flex flex-col items-center gap-2 ${className}`}>
+      {/* Version display */}
+      <div className="flex items-center gap-2">
+        {isNative ? (
+          <Smartphone className="h-3 w-3 text-muted-foreground" />
+        ) : (
+          <Globe className="h-3 w-3 text-muted-foreground" />
+        )}
+        <span className="text-xs text-muted-foreground">
+          v{version.version} (Build {version.build})
+        </span>
+        <Badge variant={isNative ? "default" : "secondary"} className="text-[10px] px-1.5 py-0">
+          {isNative ? 'Native' : 'Web'}
+        </Badge>
+      </div>
+
+      {/* Update section (native only) */}
+      {isNative && showUpdateCheck && (
+        <div className="flex items-center gap-2">
+          {updateAvailable ? (
+            <Button 
+              size="sm" 
+              variant="default"
+              onClick={installUpdate}
+              className="h-7 text-xs gap-1"
+            >
+              <Download className="h-3 w-3" />
+              Update to {updateAvailable.latestVersion}
+            </Button>
+          ) : (
+            <Button 
+              size="sm" 
+              variant="ghost"
+              onClick={checkUpdate}
+              disabled={isCheckingUpdate}
+              className="h-7 text-xs gap-1 text-muted-foreground"
+            >
+              <RefreshCw className={`h-3 w-3 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
+              {isCheckingUpdate ? 'Checking...' : 'Check for updates'}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Update available banner */}
+      {updateAvailable && (
+        <div className="text-xs text-primary text-center">
+          New version available: {updateAvailable.latestVersion}
+          {updateAvailable.mandatory && (
+            <span className="ml-1 text-destructive font-medium">(Required)</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

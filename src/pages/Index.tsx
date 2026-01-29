@@ -1,5 +1,6 @@
 import React from 'react';
 import { RfidReaderPanel } from '@/components/rfid';
+import { AppVersionBadge } from '@/components/app/AppVersionBadge';
 import type { RfidTagData } from '@/services/rfid';
 
 const Index = () => {
@@ -27,9 +28,9 @@ const Index = () => {
         
         <RfidReaderPanel onTagDetected={handleTagDetected} />
         
-        <footer className="mt-6 text-center text-xs text-muted-foreground">
-          <p>Connected to Mivanta UHF SDK</p>
-          <p className="mt-1">Running in {typeof window !== 'undefined' && (window as any).Capacitor ? 'native' : 'web'} mode</p>
+        <footer className="mt-6 text-center text-xs text-muted-foreground space-y-3">
+          <p>Connected to Mivanta UHF SDK v1.1.0</p>
+          <AppVersionBadge />
         </footer>
       </div>
     </div>
