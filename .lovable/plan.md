@@ -1,56 +1,76 @@
 
 
-## Fix: Enable Real RFID Hardware Integration
+## Integrate Mivanta SDK AAR v1.1.0
 
-The APK is correctly using the native Android plugin (not the web mock), but the native plugin itself contains placeholder/mock code. The actual Mivanta SDK calls are all commented out.
+The newer AAR file (`HCUHF_v1.1.0_20250620.aar`) has been uploaded and is now in the project. This is a significant improvement over the current JAR because an AAR (Android Archive) is a self-contained bundle that includes all Java classes, native `.so` libraries, and resources in one package.
 
----
+### What's Changing
 
-### Current Situation
+**1. Update build.gradle to use AAR instead of JAR**
 
-The native Java plugin (`MivantaRfidPlugin.java`) has all real SDK calls commented out:
-- Line 43: `boolean success = true; // Placeholder for development`
-- Line 106: `String epc = "MOCK_EPC_" + System.currentTimeMillis(); // Placeholder`
-- Line 172: `simulateTagReads();` generates fake tags every 2 seconds
+The current configuration only loads JAR files:
+```groovy
+implementation fileTree(dir: 'libs', include: ['*.jar'])
+```
 
----
+We'll update this to:
+- Include AAR files from the `libs` folder using `flatDir` repository
+- Remove the old v1.0.8 JAR since the AAR contains the same classes (and more)
 
-### What I Will Do
+**2. Clean up libs folder**
 
-**Uncomment and enable the real Mivanta SDK integration:**
+- Keep: `HCUHF_v1.1.0_20250620.aar` (the new complete SDK)
+- Remove: `HCUHF_v1.0.8_20250102.jar` (superseded by the AAR)
 
-1. **Enable SDK imports** - Uncomment the Mivanta UHF SDK imports at the top of the file
+**3. Potentially simplify native library loading**
 
-2. **Initialize the UHF Reader** - Uncomment `uhfReader = UHFReader.getInstance()` in the `load()` method
-
-3. **Connect method** - Enable real serial port connection:
-   ```java
-   boolean success = uhfReader.connect("/dev/ttyS4", 115200);
-   ```
-
-4. **Single read method** - Use actual tag inventory:
-   ```java
-   String epc = uhfReader.singleTagInventory();
-   ```
-
-5. **Continuous scanning** - Enable the real inventory listener and start/stop methods
-
-6. **Power control** - Uncomment `uhfReader.setPower(power)`
-
-7. **Remove mock simulation** - Remove the `simulateTagReads()` call and method
+Since AAR files can bundle their own native libraries, the SDK may now load its `.so` files automatically. We'll add a fallback check but keep the manual loading in case it's still needed.
 
 ---
 
-### After Approval
+### Technical Details
 
-Once approved, I will:
-1. Update `MivantaRfidPlugin.java` with all real SDK calls enabled
-2. You will need to rebuild the APK via GitHub Actions
-3. Install the new APK on the Mivanta device for testing
+#### File Changes
+
+**`android/app/build.gradle`**
+```text
+Change:
+  implementation fileTree(dir: 'libs', include: ['*.jar'])
+
+To:
+  // Include AAR files from libs folder
+  implementation(name: 'HCUHF_v1.1.0_20250620', ext: 'aar')
+  // Include any remaining JAR files (for future additions)
+  implementation fileTree(dir: 'libs', include: ['*.jar'])
+```
+
+**`android/app/libs/`**
+- Delete `HCUHF_v1.0.8_20250102.jar` (no longer needed)
+
+**`android/app/src/main/java/com/mivanta/rfid/MivantaRfidPlugin.java`**
+- Update the `loadNativeLibraries()` method to only attempt manual loading if the AAR's bundled libraries aren't automatically available
+- Add improved error logging to capture any API differences in v1.1.0
 
 ---
 
-### Technical Note
+### Why This Should Fix the Build
 
-The serial port path `/dev/ttyS4` and baud rate `115200` may need adjustment based on the actual Mivanta CX1500N device specifications. If the reader still doesn't connect after the update, we may need to verify these values with the device documentation.
+The original `NoClassDefFoundError` for `UHFReaderSLR` and `HcPowerCtrl` occurred because:
+1. The standalone JAR (`v1.0.8`) only contained core classes
+2. Module-specific classes were in separate JARs that weren't present
+
+The AAR format bundles **all dependencies together**, including:
+- Core UHF classes (`UHFReader`, `UHFTagEntity`, etc.)
+- Module implementations (`UHFReaderSLR`, etc.)
+- Power control classes (`HcPowerCtrl`)
+- Pre-compiled native `.so` libraries
+
+---
+
+### Build Verification
+
+After these changes, the GitHub Actions build should:
+1. Compile without `NoClassDefFoundError`
+2. Package all native libraries correctly
+3. Produce a working APK that can connect to the RFID hardware
 
