@@ -41,11 +41,20 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Inspect SDK JAR structure
+      - name: Inspect SDK JAR API
         run: |
-          echo "=== Listing SDK JAR contents ==="
-          jar tf android/app/libs/HCUHF_v1.0.8_20250102.jar | grep -E "\.class$" | head -50
-          echo "=== End of JAR contents ==="
+          echo "=== UHFReader class methods ==="
+          javap -classpath android/app/libs/HCUHF_v1.0.8_20250102.jar com.xlzn.hcpda.uhf.UHFReader 2>/dev/null || echo "Could not decompile UHFReader"
+          echo ""
+          echo "=== UHFTagEntity class methods ==="
+          javap -classpath android/app/libs/HCUHF_v1.0.8_20250102.jar com.xlzn.hcpda.uhf.entity.UHFTagEntity 2>/dev/null || echo "Could not decompile UHFTagEntity"
+          echo ""
+          echo "=== OnInventoryDataListener interface ==="
+          javap -classpath android/app/libs/HCUHF_v1.0.8_20250102.jar com.xlzn.hcpda.uhf.interfaces.OnInventoryDataListener 2>/dev/null || echo "Could not decompile OnInventoryDataListener"
+          echo ""
+          echo "=== UHFReaderResult class ==="
+          javap -classpath android/app/libs/HCUHF_v1.0.8_20250102.jar com.xlzn.hcpda.uhf.entity.UHFReaderResult 2>/dev/null || echo "Could not decompile UHFReaderResult"
+          echo "=== End of SDK inspection ==="
 
       - name: Generate Gradle wrapper
         working-directory: android
