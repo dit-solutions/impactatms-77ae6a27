@@ -30,6 +30,9 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          # Ensure Gradle is installed even if the wrapper JAR is missing from the repo
+          gradle-version: '8.4'
 
       - name: Install dependencies
         run: npm ci
@@ -42,7 +45,7 @@ jobs:
 
       - name: Generate Gradle wrapper
         working-directory: android
-        run: gradle wrapper --gradle-version 8.4
+        run: gradle wrapper --gradle-version 8.4 --distribution-type all
 
       - name: Build APK
         working-directory: android
