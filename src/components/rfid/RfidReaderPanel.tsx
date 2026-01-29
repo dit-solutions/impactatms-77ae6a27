@@ -55,7 +55,7 @@ export function RfidReaderPanel({ onTagDetected, className }: RfidReaderPanelPro
           {/* Connection Status Badge */}
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
             isConnected 
-              ? 'bg-green-500/10 text-green-600' 
+              ? 'bg-primary/10 text-primary' 
               : 'bg-muted text-muted-foreground'
           }`}>
             {isConnected ? (
@@ -63,7 +63,7 @@ export function RfidReaderPanel({ onTagDetected, className }: RfidReaderPanelPro
                 <Wifi className="h-4 w-4" />
                 <span>Connected</span>
                 {isScanning && (
-                  <span className="ml-1 h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                  <span className="ml-1 h-2 w-2 rounded-full bg-primary animate-pulse" />
                 )}
               </>
             ) : (

@@ -77,7 +77,7 @@ const Settings = () => {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   {isConnected ? (
-                    <Wifi className="h-4 w-4 text-green-500" />
+                    <Wifi className="h-4 w-4 text-primary" />
                   ) : (
                     <WifiOff className="h-4 w-4 text-muted-foreground" />
                   )}
