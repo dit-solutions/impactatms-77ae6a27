@@ -7,31 +7,22 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
-// SDK imports - will be enabled once API is confirmed
-// import com.xlzn.hcpda.uhf.UHFReader;
-// import com.xlzn.hcpda.uhf.interfaces.OnInventoryDataListener;
-// import com.xlzn.hcpda.uhf.entity.UHFTagEntity;
-// import com.xlzn.hcpda.uhf.entity.UHFReaderResult;
-// import java.util.List;
+import com.xlzn.hcpda.uhf.UHFReader;
+import com.xlzn.hcpda.uhf.interfaces.OnInventoryDataListener;
+import com.xlzn.hcpda.uhf.entity.UHFTagEntity;
+import com.xlzn.hcpda.uhf.entity.UHFReaderResult;
+import java.util.List;
 
 /**
  * Mivanta RFID Plugin for Capacitor
- * 
- * WAITING FOR SDK API INSPECTION OUTPUT to enable real hardware integration.
- * 
- * Known API from error messages:
- * - connect(Context) - requires Android Context
- * - singleTagInventory() returns UHFReaderResult<UHFTagEntity>
- * - OnInventoryDataListener.onInventoryData(List<UHFTagEntity>)
- * - startInventory() returns UHFReaderResult<Boolean>
+ * Bridges the web app to the native Mivanta UHF RFID hardware SDK
  */
 @CapacitorPlugin(name = "MivantaRfid")
 public class MivantaRfidPlugin extends Plugin {
 
     private static final String TAG = "MivantaRfidPlugin";
     
-    // TODO: Enable once API confirmed
-    // private UHFReader uhfReader;
+    private UHFReader uhfReader;
     private boolean isConnected = false;
     private boolean isScanning = false;
     private int currentPower = 30;
@@ -39,30 +30,45 @@ public class MivantaRfidPlugin extends Plugin {
     @Override
     public void load() {
         super.load();
-        Log.d(TAG, "MivantaRfidPlugin loaded - MOCK MODE (waiting for SDK API confirmation)");
+        Log.d(TAG, "MivantaRfidPlugin loaded - initializing UHF Reader");
+        try {
+            uhfReader = UHFReader.getInstance();
+            Log.d(TAG, "UHFReader instance obtained successfully");
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to get UHFReader instance: " + e.getMessage());
+        }
     }
 
     @PluginMethod
     public void connect(PluginCall call) {
         try {
-            // TODO: Real implementation needs Context
-            // uhfReader.connect(getContext());
-            boolean success = true; // Mock
+            if (uhfReader == null) {
+                uhfReader = UHFReader.getInstance();
+            }
             
-            if (success) {
+            // Connect using Android Context
+            UHFReaderResult<Boolean> result = uhfReader.connect(getContext());
+            Boolean success = result.getData();
+            
+            if (success != null && success) {
                 isConnected = true;
                 
-                JSObject result = new JSObject();
-                result.put("connected", true);
-                result.put("message", "UHF Reader connected (MOCK - SDK API pending)");
-                call.resolve(result);
+                // Set default power level
+                uhfReader.setPower(currentPower);
                 
-                Log.d(TAG, "UHF Reader connected (mock)");
+                JSObject response = new JSObject();
+                response.put("connected", true);
+                response.put("message", "UHF Reader connected successfully");
+                call.resolve(response);
+                
+                Log.d(TAG, "UHF Reader connected");
             } else {
-                call.reject("Failed to connect to UHF Reader");
+                String errorMsg = result.getMessage();
+                Log.e(TAG, "Failed to connect: " + errorMsg);
+                call.reject("Failed to connect to UHF Reader: " + errorMsg);
             }
         } catch (Exception e) {
-            Log.e(TAG, "Connection error: " + e.getMessage());
+            Log.e(TAG, "Connection error: " + e.getMessage(), e);
             call.reject("Connection error: " + e.getMessage());
         }
     }
@@ -70,19 +76,25 @@ public class MivantaRfidPlugin extends Plugin {
     @PluginMethod
     public void disconnect(PluginCall call) {
         try {
-            if (isScanning) {
+            if (isScanning && uhfReader != null) {
+                uhfReader.stopInventory();
                 isScanning = false;
+            }
+            
+            if (uhfReader != null) {
+                UHFReaderResult<Boolean> result = uhfReader.disConnect();
+                Log.d(TAG, "Disconnect result: " + result.getMessage());
             }
             isConnected = false;
             
-            JSObject result = new JSObject();
-            result.put("connected", false);
-            result.put("message", "UHF Reader disconnected");
-            call.resolve(result);
+            JSObject response = new JSObject();
+            response.put("connected", false);
+            response.put("message", "UHF Reader disconnected");
+            call.resolve(response);
             
             Log.d(TAG, "UHF Reader disconnected");
         } catch (Exception e) {
-            Log.e(TAG, "Disconnect error: " + e.getMessage());
+            Log.e(TAG, "Disconnect error: " + e.getMessage(), e);
             call.reject("Disconnect error: " + e.getMessage());
         }
     }
@@ -95,20 +107,33 @@ public class MivantaRfidPlugin extends Plugin {
         }
 
         try {
-            // TODO: Real implementation
-            // UHFReaderResult<UHFTagEntity> result = uhfReader.singleTagInventory();
-            // String epc = result.getData().getEpc(); // or similar
-            String epc = "MOCK_EPC_" + System.currentTimeMillis();
+            // Perform single tag inventory
+            UHFReaderResult<UHFTagEntity> result = uhfReader.singleTagInventory();
+            UHFTagEntity tag = result.getData();
             
-            JSObject result = new JSObject();
-            result.put("success", true);
-            result.put("epc", epc);
-            result.put("timestamp", System.currentTimeMillis());
-            call.resolve(result);
-            
-            Log.d(TAG, "Single read (mock): " + epc);
+            if (tag != null) {
+                // Note: SDK uses getEcpHex() not getEpc()
+                String epc = tag.getEcpHex();
+                
+                JSObject response = new JSObject();
+                response.put("success", true);
+                response.put("epc", epc != null ? epc : "");
+                response.put("rssi", tag.getRssi());
+                response.put("timestamp", System.currentTimeMillis());
+                call.resolve(response);
+                
+                Log.d(TAG, "Single read: " + epc);
+            } else {
+                JSObject response = new JSObject();
+                response.put("success", false);
+                response.put("epc", "");
+                response.put("timestamp", System.currentTimeMillis());
+                call.resolve(response);
+                
+                Log.d(TAG, "Single read: No tag detected");
+            }
         } catch (Exception e) {
-            Log.e(TAG, "Single read error: " + e.getMessage());
+            Log.e(TAG, "Single read error: " + e.getMessage(), e);
             call.reject("Read error: " + e.getMessage());
         }
     }
@@ -126,42 +151,48 @@ public class MivantaRfidPlugin extends Plugin {
         }
 
         try {
-            // TODO: Real implementation with List<UHFTagEntity>
-            /*
+            // Set up the inventory data listener
             uhfReader.setOnInventoryDataListener(new OnInventoryDataListener() {
                 @Override
                 public void onInventoryData(List<UHFTagEntity> tags) {
-                    for (UHFTagEntity tag : tags) {
-                        JSObject tagData = new JSObject();
-                        tagData.put("epc", tag.getEPC()); // Need to confirm method name
-                        tagData.put("rssi", tag.getRSSI());
-                        tagData.put("timestamp", System.currentTimeMillis());
-                        notifyListeners("tagDetected", tagData);
+                    if (tags != null) {
+                        for (UHFTagEntity tag : tags) {
+                            if (tag != null) {
+                                JSObject tagData = new JSObject();
+                                // Note: SDK uses getEcpHex() not getEpc()
+                                tagData.put("epc", tag.getEcpHex());
+                                tagData.put("rssi", tag.getRssi());
+                                tagData.put("count", tag.getCount());
+                                tagData.put("timestamp", System.currentTimeMillis());
+                                
+                                notifyListeners("tagDetected", tagData);
+                                Log.d(TAG, "Tag detected: " + tag.getEcpHex());
+                            }
+                        }
                     }
                 }
             });
-            UHFReaderResult<Boolean> startResult = uhfReader.startInventory();
-            boolean started = startResult.getData();
-            */
-            boolean started = true;
             
-            if (started) {
+            // Start inventory
+            UHFReaderResult<Boolean> result = uhfReader.startInventory();
+            Boolean started = result.getData();
+            
+            if (started != null && started) {
                 isScanning = true;
                 
-                JSObject result = new JSObject();
-                result.put("scanning", true);
-                result.put("message", "Continuous scanning started (MOCK)");
-                call.resolve(result);
+                JSObject response = new JSObject();
+                response.put("scanning", true);
+                response.put("message", "Continuous scanning started");
+                call.resolve(response);
                 
-                Log.d(TAG, "Continuous scanning started (mock)");
-                
-                // Mock simulation
-                simulateTagReads();
+                Log.d(TAG, "Continuous scanning started");
             } else {
-                call.reject("Failed to start scanning");
+                String errorMsg = result.getMessage();
+                Log.e(TAG, "Failed to start scanning: " + errorMsg);
+                call.reject("Failed to start scanning: " + errorMsg);
             }
         } catch (Exception e) {
-            Log.e(TAG, "Start continuous error: " + e.getMessage());
+            Log.e(TAG, "Start continuous error: " + e.getMessage(), e);
             call.reject("Start error: " + e.getMessage());
         }
     }
@@ -169,24 +200,28 @@ public class MivantaRfidPlugin extends Plugin {
     @PluginMethod
     public void stopContinuous(PluginCall call) {
         if (!isScanning) {
-            JSObject result = new JSObject();
-            result.put("scanning", false);
-            result.put("message", "Not currently scanning");
-            call.resolve(result);
+            JSObject response = new JSObject();
+            response.put("scanning", false);
+            response.put("message", "Not currently scanning");
+            call.resolve(response);
             return;
         }
 
         try {
+            if (uhfReader != null) {
+                UHFReaderResult<Boolean> result = uhfReader.stopInventory();
+                Log.d(TAG, "Stop inventory result: " + result.getMessage());
+            }
             isScanning = false;
             
-            JSObject result = new JSObject();
-            result.put("scanning", false);
-            result.put("message", "Scanning stopped");
-            call.resolve(result);
+            JSObject response = new JSObject();
+            response.put("scanning", false);
+            response.put("message", "Scanning stopped");
+            call.resolve(response);
             
             Log.d(TAG, "Continuous scanning stopped");
         } catch (Exception e) {
-            Log.e(TAG, "Stop continuous error: " + e.getMessage());
+            Log.e(TAG, "Stop continuous error: " + e.getMessage(), e);
             call.reject("Stop error: " + e.getMessage());
         }
     }
@@ -206,63 +241,58 @@ public class MivantaRfidPlugin extends Plugin {
         }
 
         try {
-            currentPower = power;
-            
-            JSObject result = new JSObject();
-            result.put("power", power);
-            result.put("message", "Power set to " + power + " dBm");
-            call.resolve(result);
-            
-            Log.d(TAG, "Power set to: " + power);
+            if (uhfReader != null) {
+                UHFReaderResult<Boolean> result = uhfReader.setPower(power);
+                Boolean success = result.getData();
+                
+                if (success != null && success) {
+                    currentPower = power;
+                    
+                    JSObject response = new JSObject();
+                    response.put("power", power);
+                    response.put("message", "Power set to " + power + " dBm");
+                    call.resolve(response);
+                    
+                    Log.d(TAG, "Power set to: " + power);
+                } else {
+                    call.reject("Failed to set power: " + result.getMessage());
+                }
+            }
         } catch (Exception e) {
-            Log.e(TAG, "Set power error: " + e.getMessage());
+            Log.e(TAG, "Set power error: " + e.getMessage(), e);
             call.reject("Set power error: " + e.getMessage());
         }
     }
 
     @PluginMethod
     public void getStatus(PluginCall call) {
-        JSObject result = new JSObject();
-        result.put("connected", isConnected);
-        result.put("scanning", isScanning);
-        result.put("power", currentPower);
-        call.resolve(result);
-    }
-
-    private void simulateTagReads() {
-        new Thread(() -> {
-            String[] mockEpcs = {
-                "E200001234567890ABCD",
-                "E200009876543210EFGH",
-                "E200005555666677778888"
-            };
-            int index = 0;
-            
-            while (isScanning) {
-                try {
-                    Thread.sleep(2000);
-                    
-                    if (isScanning) {
-                        JSObject tagData = new JSObject();
-                        tagData.put("epc", mockEpcs[index % mockEpcs.length]);
-                        tagData.put("rssi", -45 + (int)(Math.random() * 20));
-                        tagData.put("count", 1);
-                        tagData.put("timestamp", System.currentTimeMillis());
-                        
-                        notifyListeners("tagDetected", tagData);
-                        index++;
-                    }
-                } catch (InterruptedException e) {
-                    break;
-                }
-            }
-        }).start();
+        JSObject response = new JSObject();
+        response.put("connected", isConnected);
+        response.put("scanning", isScanning);
+        response.put("power", currentPower);
+        call.resolve(response);
     }
 
     @Override
     protected void handleOnDestroy() {
-        isScanning = false;
-        isConnected = false;
+        if (uhfReader != null) {
+            if (isScanning) {
+                try {
+                    uhfReader.stopInventory();
+                } catch (Exception e) {
+                    Log.e(TAG, "Error stopping inventory: " + e.getMessage());
+                }
+                isScanning = false;
+            }
+            if (isConnected) {
+                try {
+                    uhfReader.disConnect();
+                } catch (Exception e) {
+                    Log.e(TAG, "Error disconnecting: " + e.getMessage());
+                }
+                isConnected = false;
+            }
+        }
         super.handleOnDestroy();
     }
 }
