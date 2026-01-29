@@ -77,9 +77,9 @@ const Settings = () => {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   {isConnected ? (
-                    <Wifi className="h-4 w-4 text-primary" />
+                    <Wifi className="h-4 w-4 text-emerald-500" />
                   ) : (
-                    <WifiOff className="h-4 w-4 text-muted-foreground" />
+                    <WifiOff className="h-4 w-4 text-destructive" />
                   )}
                   Reader Connection
                 </CardTitle>
