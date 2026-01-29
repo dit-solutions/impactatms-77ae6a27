@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { rfidService, RfidTagData, RfidStatus, RfidReadMode, FastTagData } from '@/services/rfid';
+import { rfidService, RfidTagData, RfidStatus, RfidReadMode, FastTagData, TriggerEventData } from '@/services/rfid';
 import { toast } from '@/hooks/use-toast';
 
 interface UseRfidReaderReturn {
@@ -38,11 +38,53 @@ export function useRfidReader(
   const [isConnected, setIsConnected] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [power, setPowerState] = useState(30);
-  const [mode, setMode] = useState<RfidReadMode>('single');
+  const [mode, setModeState] = useState<RfidReadMode>('single');
   const [lastTag, setLastTag] = useState<RfidTagData | null>(null);
   const [lastFastTag, setLastFastTag] = useState<FastTagData | null>(null);
   const [tagHistory, setTagHistory] = useState<RfidTagData[]>([]);
   const [fastTagHistory, setFastTagHistory] = useState<FastTagData[]>([]);
+
+  // Handler for hardware trigger button
+  const handleTriggerPressed = useCallback(async (data: TriggerEventData) => {
+    console.log('Trigger pressed, mode:', data.mode, 'isScanning:', data.isScanning);
+    
+    if (data.mode === 'single') {
+      // Single mode: perform single read on trigger press
+      try {
+        const fastTag = await rfidService.readTagDetails();
+        if (fastTag) {
+          setLastFastTag(fastTag);
+          setFastTagHistory(prev => [fastTag, ...prev].slice(0, 100));
+          
+          const basicTag: RfidTagData = {
+            epc: fastTag.epc,
+            rssi: fastTag.rssi,
+            timestamp: fastTag.timestamp
+          };
+          setLastTag(basicTag);
+          setTagHistory(prev => [basicTag, ...prev].slice(0, 100));
+          onTagDetected?.(basicTag);
+          
+          toast({
+            title: 'Tag Scanned',
+            description: `EPC: ${fastTag.epc.substring(0, 16)}...`
+          });
+        }
+      } catch (error) {
+        console.error('Trigger scan failed:', error);
+      }
+    } else {
+      // Continuous mode: toggle scanning
+      if (!data.isScanning) {
+        await rfidService.startContinuous();
+        toast({
+          title: 'Scanning Started',
+          description: 'Continuous scanning active'
+        });
+      }
+      // In continuous mode, scanning continues until mode is changed back to single
+    }
+  }, [onTagDetected]);
 
   // Set up service callbacks
   useEffect(() => {
@@ -60,6 +102,12 @@ export function useRfidReader(
           description: error.message,
           variant: 'destructive'
         });
+      },
+      onTriggerPressed: handleTriggerPressed,
+      onTriggerReleased: (data) => {
+        console.log('Trigger released:', data);
+        // For single mode, no action on release
+        // For continuous mode, keep scanning until mode changes
       }
     });
 
@@ -75,7 +123,7 @@ export function useRfidReader(
     return () => {
       rfidService.clearCallbacks();
     };
-  }, [onTagDetected]);
+  }, [onTagDetected, handleTriggerPressed]);
 
   const connect = useCallback(async () => {
     const success = await rfidService.connect();
@@ -196,6 +244,17 @@ export function useRfidReader(
       setPowerState(newPower);
     }
   }, []);
+
+  // Set mode and sync to native plugin
+  const setMode = useCallback((newMode: RfidReadMode) => {
+    setModeState(newMode);
+    rfidService.setMode(newMode);
+    
+    // If switching from continuous to single and currently scanning, stop scanning
+    if (newMode === 'single' && isScanning) {
+      rfidService.stopContinuous();
+    }
+  }, [isScanning]);
 
   const clearHistory = useCallback(() => {
     setTagHistory([]);

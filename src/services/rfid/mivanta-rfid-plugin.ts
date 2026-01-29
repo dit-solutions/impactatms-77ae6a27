@@ -33,6 +33,7 @@ export interface RfidStatus {
   connected: boolean;
   scanning: boolean;
   power: number;
+  mode?: string;
 }
 
 /**
@@ -83,6 +84,22 @@ export interface PowerResult {
 }
 
 /**
+ * Mode setting result
+ */
+export interface ModeResult {
+  mode: string;
+}
+
+/**
+ * Trigger event data from hardware button
+ */
+export interface TriggerEventData {
+  action: 'trigger_pressed' | 'trigger_released';
+  mode: string;
+  isScanning?: boolean;
+}
+
+/**
  * Debug info result from native SDK
  */
 export interface DebugInfoResult {
@@ -90,6 +107,7 @@ export interface DebugInfoResult {
   nativeLibsLoaded: boolean;
   isConnected: boolean;
   methods: string;
+  currentMode?: string;
 }
 
 /**
@@ -136,6 +154,12 @@ export interface MivantaRfidPlugin {
   setPower(options: { power: number }): Promise<PowerResult>;
   
   /**
+   * Set the current read mode (for hardware button behavior)
+   * @param options Mode: 'single' or 'continuous'
+   */
+  setMode(options: { mode: string }): Promise<ModeResult>;
+  
+  /**
    * Get current connection and scanning status
    */
   getStatus(): Promise<RfidStatus>;
@@ -151,6 +175,22 @@ export interface MivantaRfidPlugin {
   addListener(
     eventName: 'tagDetected',
     listenerFunc: (data: RfidTagData) => void
+  ): Promise<{ remove: () => void }>;
+  
+  /**
+   * Add listener for hardware trigger button events
+   */
+  addListener(
+    eventName: 'triggerPressed',
+    listenerFunc: (data: TriggerEventData) => void
+  ): Promise<{ remove: () => void }>;
+  
+  /**
+   * Add listener for hardware trigger button release events
+   */
+  addListener(
+    eventName: 'triggerReleased',
+    listenerFunc: (data: TriggerEventData) => void
   ): Promise<{ remove: () => void }>;
   
   /**

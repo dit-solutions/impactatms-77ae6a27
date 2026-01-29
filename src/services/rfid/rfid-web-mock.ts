@@ -7,10 +7,13 @@ import type {
   ScanningResult, 
   PowerResult, 
   RfidStatus,
-  DebugInfoResult
+  DebugInfoResult,
+  ModeResult,
+  TriggerEventData
 } from './mivanta-rfid-plugin';
 
-type ListenerCallback = (data: RfidTagData) => void;
+type TagListenerCallback = (data: RfidTagData) => void;
+type TriggerListenerCallback = (data: TriggerEventData) => void;
 
 /**
  * Web mock implementation for development/testing
@@ -20,7 +23,10 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
   private connected = false;
   private scanning = false;
   private power = 30;
-  private listeners: ListenerCallback[] = [];
+  private mode = 'single';
+  private tagListeners: TagListenerCallback[] = [];
+  private triggerPressedListeners: TriggerListenerCallback[] = [];
+  private triggerReleasedListeners: TriggerListenerCallback[] = [];
   private scanInterval: ReturnType<typeof setInterval> | null = null;
 
   // Mock FASTag data with realistic TID, EPC, and User data
@@ -131,7 +137,7 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
         };
         
         console.log('[RFID Mock] Tag detected:', tagData.epc);
-        this.listeners.forEach(listener => listener(tagData));
+        this.tagListeners.forEach(listener => listener(tagData));
       }
     }, 1500 + Math.random() * 1500);
 
@@ -165,11 +171,18 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
     return { power, message: `Mock power set to ${power} dBm` };
   }
 
+  async setMode(options: { mode: string }): Promise<ModeResult> {
+    console.log('[RFID Mock] Setting mode to:', options.mode);
+    this.mode = options.mode;
+    return { mode: options.mode };
+  }
+
   async getStatus(): Promise<RfidStatus> {
     return {
       connected: this.connected,
       scanning: this.scanning,
-      power: this.power
+      power: this.power,
+      mode: this.mode
     };
   }
 
@@ -178,21 +191,42 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
       sdkAvailable: true,
       nativeLibsLoaded: true,
       isConnected: this.connected,
-      methods: 'Web Mock - No native SDK methods available\n\nThis is a browser simulation. Deploy to a real device to see actual SDK methods.'
+      methods: 'Web Mock - No native SDK methods available\n\nThis is a browser simulation. Deploy to a real device to see actual SDK methods.',
+      currentMode: this.mode
     };
   }
 
   async addListener(
-    eventName: 'tagDetected',
-    listenerFunc: ListenerCallback
+    eventName: 'tagDetected' | 'triggerPressed' | 'triggerReleased',
+    listenerFunc: TagListenerCallback | TriggerListenerCallback
   ): Promise<{ remove: () => void }> {
     if (eventName === 'tagDetected') {
-      this.listeners.push(listenerFunc);
+      this.tagListeners.push(listenerFunc as TagListenerCallback);
       return {
         remove: () => {
-          const index = this.listeners.indexOf(listenerFunc);
+          const index = this.tagListeners.indexOf(listenerFunc as TagListenerCallback);
           if (index > -1) {
-            this.listeners.splice(index, 1);
+            this.tagListeners.splice(index, 1);
+          }
+        }
+      };
+    } else if (eventName === 'triggerPressed') {
+      this.triggerPressedListeners.push(listenerFunc as TriggerListenerCallback);
+      return {
+        remove: () => {
+          const index = this.triggerPressedListeners.indexOf(listenerFunc as TriggerListenerCallback);
+          if (index > -1) {
+            this.triggerPressedListeners.splice(index, 1);
+          }
+        }
+      };
+    } else if (eventName === 'triggerReleased') {
+      this.triggerReleasedListeners.push(listenerFunc as TriggerListenerCallback);
+      return {
+        remove: () => {
+          const index = this.triggerReleasedListeners.indexOf(listenerFunc as TriggerListenerCallback);
+          if (index > -1) {
+            this.triggerReleasedListeners.splice(index, 1);
           }
         }
       };
@@ -201,7 +235,9 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
   }
 
   async removeAllListeners(): Promise<void> {
-    this.listeners = [];
+    this.tagListeners = [];
+    this.triggerPressedListeners = [];
+    this.triggerReleasedListeners = [];
   }
 
   private delay(ms: number): Promise<void> {

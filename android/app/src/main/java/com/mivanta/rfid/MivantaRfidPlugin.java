@@ -1,6 +1,7 @@
 package com.mivanta.rfid;
 
 import android.util.Log;
+import android.view.KeyEvent;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -32,24 +33,29 @@ public class MivantaRfidPlugin extends Plugin {
     // Default access password (no password)
     private static final String DEFAULT_PASSWORD = "00000000";
     
+    // Hardware trigger button key codes (common for handheld scanners)
+    private static final int KEYCODE_SCAN_TRIGGER = 280;  // Common scan trigger keycode
+    private static final int KEYCODE_SCAN_TRIGGER_ALT = 139;  // F7 key often used as trigger
+    private static final int KEYCODE_SCAN_TRIGGER_ALT2 = 293;  // Another common trigger
+    
     private UHFReader uhfReader;
     private boolean isConnected = false;
     private boolean isScanning = false;
     private int currentPower = 30;
     private boolean sdkAvailable = false;
     private static boolean nativeLibsLoaded = false;
+    
+    // Track current read mode for button behavior
+    private String currentMode = "single"; // "single" or "continuous"
 
     /**
      * Explicitly load native libraries required by the Mivanta SDK.
-     * The AAR v1.1.0 may bundle these libraries, but we load them manually
-     * as a fallback to ensure compatibility across devices.
      */
     private static synchronized void loadNativeLibraries() {
         if (nativeLibsLoaded) {
             return;
         }
         
-        // List of libraries in dependency order
         String[] libraries = {"power", "SerialPortHc", "ModuleAPI"};
         boolean allLoaded = true;
         
@@ -59,16 +65,13 @@ public class MivantaRfidPlugin extends Plugin {
                 System.loadLibrary(lib);
                 Log.d(TAG, "Successfully loaded: " + lib);
             } catch (UnsatisfiedLinkError e) {
-                // Library might already be loaded by the AAR, or not available
                 Log.w(TAG, "Could not load " + lib + " (may be bundled in AAR): " + e.getMessage());
-                // Don't fail immediately - the AAR might have loaded it already
             } catch (Throwable t) {
                 Log.e(TAG, "Error loading " + lib + ": " + t.getMessage(), t);
                 allLoaded = false;
             }
         }
         
-        // Mark as loaded - we'll verify at SDK init time
         nativeLibsLoaded = true;
         Log.d(TAG, "Native library loading completed (allExplicitlyLoaded=" + allLoaded + ")");
     }
@@ -78,7 +81,6 @@ public class MivantaRfidPlugin extends Plugin {
         super.load();
         Log.d(TAG, "MivantaRfidPlugin loaded - attempting to initialize UHF Reader");
         
-        // Load native libraries first
         loadNativeLibraries();
         
         if (!nativeLibsLoaded) {
@@ -92,8 +94,6 @@ public class MivantaRfidPlugin extends Plugin {
             if (uhfReader != null) {
                 sdkAvailable = true;
                 Log.d(TAG, "UHFReader instance obtained successfully");
-                
-                // Log available methods for debugging
                 logAvailableMethods();
             } else {
                 Log.w(TAG, "UHFReader.getInstance() returned null");
@@ -130,7 +130,68 @@ public class MivantaRfidPlugin extends Plugin {
     }
     
     /**
-     * Get debug information including SDK methods (accessible from UI)
+     * Handle hardware key events (scan trigger button)
+     */
+    public boolean handleKeyDown(int keyCode, KeyEvent event) {
+        Log.d(TAG, "Key down: " + keyCode);
+        
+        if (keyCode == KEYCODE_SCAN_TRIGGER || 
+            keyCode == KEYCODE_SCAN_TRIGGER_ALT || 
+            keyCode == KEYCODE_SCAN_TRIGGER_ALT2 ||
+            keyCode == KeyEvent.KEYCODE_F7 ||
+            keyCode == KeyEvent.KEYCODE_F8) {
+            
+            if (isConnected) {
+                // Notify web app of trigger press
+                JSObject data = new JSObject();
+                data.put("action", "trigger_pressed");
+                data.put("mode", currentMode);
+                data.put("isScanning", isScanning);
+                notifyListeners("triggerPressed", data);
+                Log.d(TAG, "Trigger button pressed, mode: " + currentMode);
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    public boolean handleKeyUp(int keyCode, KeyEvent event) {
+        Log.d(TAG, "Key up: " + keyCode);
+        
+        if (keyCode == KEYCODE_SCAN_TRIGGER || 
+            keyCode == KEYCODE_SCAN_TRIGGER_ALT || 
+            keyCode == KEYCODE_SCAN_TRIGGER_ALT2 ||
+            keyCode == KeyEvent.KEYCODE_F7 ||
+            keyCode == KeyEvent.KEYCODE_F8) {
+            
+            if (isConnected) {
+                JSObject data = new JSObject();
+                data.put("action", "trigger_released");
+                data.put("mode", currentMode);
+                notifyListeners("triggerReleased", data);
+                Log.d(TAG, "Trigger button released");
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Set the current read mode (called from web app)
+     */
+    @PluginMethod
+    public void setMode(PluginCall call) {
+        String mode = call.getString("mode", "single");
+        currentMode = mode;
+        Log.d(TAG, "Mode set to: " + mode);
+        
+        JSObject response = new JSObject();
+        response.put("mode", mode);
+        call.resolve(response);
+    }
+    
+    /**
+     * Get debug information including SDK methods
      */
     @PluginMethod
     public void getDebugInfo(PluginCall call) {
@@ -138,6 +199,7 @@ public class MivantaRfidPlugin extends Plugin {
         response.put("sdkAvailable", sdkAvailable);
         response.put("nativeLibsLoaded", nativeLibsLoaded);
         response.put("isConnected", isConnected);
+        response.put("currentMode", currentMode);
         
         StringBuilder methodsList = new StringBuilder();
         
@@ -169,14 +231,12 @@ public class MivantaRfidPlugin extends Plugin {
     public void connect(PluginCall call) {
         Log.d(TAG, "connect() called, sdkAvailable=" + sdkAvailable);
         
-        // Check if SDK loaded at all
         if (!sdkAvailable) {
             Log.e(TAG, "SDK not available - native libraries may have failed to load");
             call.reject("RFID SDK not available. Native libraries may not be compatible with this device.");
             return;
         }
         
-        // Run connection in background thread to allow retries with delays
         new Thread(() -> {
             try {
                 if (uhfReader == null) {
@@ -192,7 +252,6 @@ public class MivantaRfidPlugin extends Plugin {
                     return;
                 }
                 
-                // Retry logic for SDK warm-up timing issues
                 int maxRetries = 3;
                 int retryDelayMs = 500;
                 boolean connected = false;
@@ -201,7 +260,6 @@ public class MivantaRfidPlugin extends Plugin {
                 for (int attempt = 1; attempt <= maxRetries && !connected; attempt++) {
                     Log.d(TAG, "Connection attempt " + attempt + "/" + maxRetries);
                     
-                    // Small delay before first attempt to let SDK warm up
                     if (attempt == 1) {
                         try {
                             Thread.sleep(200);
@@ -224,11 +282,10 @@ public class MivantaRfidPlugin extends Plugin {
                         }
                     }
                     
-                    // Wait before retry (except on last attempt or if connected)
                     if (!connected && attempt < maxRetries) {
                         try {
                             Thread.sleep(retryDelayMs);
-                            retryDelayMs *= 1.5; // Exponential backoff
+                            retryDelayMs *= 1.5;
                         } catch (InterruptedException ignored) {}
                     }
                 }
@@ -236,7 +293,6 @@ public class MivantaRfidPlugin extends Plugin {
                 if (connected) {
                     isConnected = true;
 
-                    // Best-effort: set default power level (do not crash if SDK returns error)
                     try {
                         UHFReaderResult<Boolean> powerResult = uhfReader.setPower(currentPower);
                         if (powerResult == null) {
@@ -303,7 +359,6 @@ public class MivantaRfidPlugin extends Plugin {
         }
 
         try {
-            // Perform single tag inventory
             UHFReaderResult<UHFTagEntity> result = uhfReader.singleTagInventory();
             
             if (result == null) {
@@ -319,7 +374,6 @@ public class MivantaRfidPlugin extends Plugin {
             UHFTagEntity tag = result.getData();
             
             if (tag != null) {
-                // Note: SDK uses getEcpHex() not getEpc()
                 String epc = tag.getEcpHex();
                 
                 JSObject response = new JSObject();
@@ -346,8 +400,13 @@ public class MivantaRfidPlugin extends Plugin {
     }
 
     /**
-     * Read complete FASTag details including TID, EPC, and User memory banks
-     * This performs an inventory first to get the tag, then reads additional memory banks
+     * Read complete FASTag details including TID, EPC, and User memory banks.
+     * 
+     * Based on user's live app format:
+     * Raw data: "3416 1FA8 2032 8EE8 1119 7D00 E280 1105 2000 775D 0E46 0A69 58585858..."
+     * - First 24 hex digits = TID (e.g., "34161FA820328EE811197D00")
+     * - Data starting with 'E' = EPC (e.g., "E28011052000775D0E460A69")
+     * - Remaining data = User Data
      */
     @PluginMethod
     public void readTagDetails(PluginCall call) {
@@ -357,7 +416,7 @@ public class MivantaRfidPlugin extends Plugin {
         }
 
         try {
-            // Step 1: Perform single tag inventory to get EPC
+            // Step 1: Perform single tag inventory to get raw data
             UHFReaderResult<UHFTagEntity> inventoryResult = uhfReader.singleTagInventory();
             
             if (inventoryResult == null || inventoryResult.getData() == null) {
@@ -376,31 +435,29 @@ public class MivantaRfidPlugin extends Plugin {
             
             Log.d(TAG, "readTagDetails: Tag found with EPC: " + epcFromInventory + ", RSSI: " + rssi);
             
-            // Initialize data holders
+            // Initialize parsed data
             String tid = "";
             String epc = epcFromInventory != null ? epcFromInventory : "";
             String userData = "";
             
-            // Step 2: Try to read TID memory bank (bank 2) 
-            // TID is typically 6 words (12 bytes / 24 hex chars) starting at address 0
+            // Try to read TID memory bank (bank 2)
             Log.d(TAG, "Attempting to read TID bank...");
             tid = tryReadMemoryBankDirect(MEMBANK_TID, 0, 6, epcFromInventory);
             Log.d(TAG, "TID read result: '" + tid + "'");
             
-            // Step 3: Try to read User memory bank (bank 3)
-            // User data can vary, try 8 words first (16 bytes / 32 hex chars)
+            // Try to read User memory bank (bank 3)
             Log.d(TAG, "Attempting to read User bank...");
-            userData = tryReadMemoryBankDirect(MEMBANK_USER, 0, 8, epcFromInventory);
+            userData = tryReadMemoryBankDirect(MEMBANK_USER, 0, 32, epcFromInventory);
             Log.d(TAG, "User data read result: '" + userData + "'");
             
-            // If first 8 words are empty, it might just be no data (not protected)
-            // If user data is still empty, try smaller read
             if (userData.isEmpty()) {
-                userData = tryReadMemoryBankDirect(MEMBANK_USER, 0, 4, epcFromInventory);
-                Log.d(TAG, "User data retry (4 words): '" + userData + "'");
+                userData = tryReadMemoryBankDirect(MEMBANK_USER, 0, 16, epcFromInventory);
+            }
+            if (userData.isEmpty()) {
+                userData = tryReadMemoryBankDirect(MEMBANK_USER, 0, 8, epcFromInventory);
             }
             
-            // Build response with all data
+            // Build response
             JSObject response = new JSObject();
             response.put("success", true);
             response.put("tid", tid != null ? tid : "");
@@ -409,10 +466,9 @@ public class MivantaRfidPlugin extends Plugin {
             response.put("rssi", rssi);
             response.put("timestamp", System.currentTimeMillis());
             
-            // Add debug message if TID/User are empty
             String debugMsg = "";
             if ((tid == null || tid.isEmpty()) && (userData == null || userData.isEmpty())) {
-                debugMsg = "EPC only - TID/User banks may be protected or SDK read method not found";
+                debugMsg = "EPC only - TID/User banks may need different SDK method";
             }
             response.put("message", debugMsg);
             
@@ -426,25 +482,96 @@ public class MivantaRfidPlugin extends Plugin {
     }
     
     /**
+     * Parse raw reader data in the format from user's live app.
+     * Input: "3416 1FA8 2032 8EE8 1119 7D00 E280 1105 2000 775D 0E46 0A69 58585858..."
+     * Returns: JSObject with tid, epc, userData parsed out
+     */
+    @PluginMethod
+    public void parseRawReaderData(PluginCall call) {
+        String rawData = call.getString("rawData", "");
+        
+        if (rawData == null || rawData.isEmpty()) {
+            call.reject("No raw data provided");
+            return;
+        }
+        
+        JSObject result = parseReaderDataString(rawData);
+        call.resolve(result);
+    }
+    
+    /**
+     * Parse the raw data string into TID, EPC, and User Data components.
+     * Format: First 24 hex chars = TID, data starting with 'E' = EPC, rest = User Data
+     */
+    private JSObject parseReaderDataString(String rawData) {
+        // Remove all spaces and convert to uppercase
+        String cleanData = rawData.replaceAll("\\s+", "").toUpperCase();
+        
+        Log.d(TAG, "parseReaderDataString input: " + cleanData + " (length: " + cleanData.length() + ")");
+        
+        String tid = "";
+        String epc = "";
+        String userData = "";
+        
+        if (cleanData.length() >= 24) {
+            // First 24 hex characters are TID
+            tid = cleanData.substring(0, 24);
+            String remaining = cleanData.substring(24);
+            
+            Log.d(TAG, "TID extracted: " + tid);
+            Log.d(TAG, "Remaining after TID: " + remaining);
+            
+            // Find EPC - starts with 'E' 
+            int epcStart = remaining.indexOf('E');
+            if (epcStart >= 0) {
+                // EPC is typically 24 hex chars (96 bits)
+                String fromE = remaining.substring(epcStart);
+                if (fromE.length() >= 24) {
+                    epc = fromE.substring(0, 24);
+                    userData = fromE.substring(24);
+                } else {
+                    epc = fromE;
+                }
+                
+                Log.d(TAG, "EPC extracted: " + epc);
+                Log.d(TAG, "User data extracted: " + userData);
+            } else {
+                // No 'E' found, treat remaining as user data
+                userData = remaining;
+                Log.d(TAG, "No EPC marker found, all remaining is user data");
+            }
+        } else {
+            // Short data - might just be EPC
+            if (cleanData.startsWith("E")) {
+                epc = cleanData;
+            } else {
+                tid = cleanData;
+            }
+        }
+        
+        JSObject result = new JSObject();
+        result.put("tid", tid);
+        result.put("epc", epc);
+        result.put("userData", userData);
+        result.put("rawLength", cleanData.length());
+        
+        return result;
+    }
+    
+    /**
      * Try to read a memory bank using direct SDK method calls
-     * Returns hex string or empty string if read fails
      */
     private String tryReadMemoryBankDirect(int memBank, int startAddr, int wordCount, String epc) {
         String result = "";
         
-        // First, try the most common SDK method names directly
-        // Many UHF SDKs use readData(String password, int bank, int startAddr, int count)
-        
         Log.d(TAG, "tryReadMemoryBankDirect: bank=" + memBank + ", startAddr=" + startAddr + ", wordCount=" + wordCount);
         
-        // Attempt 1: Try direct reflection with readData method 
         result = tryDirectReadMethod(memBank, startAddr, wordCount, epc);
         if (result != null && !result.isEmpty()) {
             Log.d(TAG, "Direct read succeeded for bank " + memBank + ": " + result);
             return result;
         }
         
-        // Attempt 2: Try using the reflection-based discovery
         result = tryReadWithReflectionDiscovery(memBank, startAddr, wordCount, epc);
         if (result != null && !result.isEmpty()) {
             Log.d(TAG, "Reflection discovery read succeeded for bank " + memBank + ": " + result);
@@ -464,7 +591,6 @@ public class MivantaRfidPlugin extends Plugin {
             
             for (Method method : methods) {
                 String name = method.getName();
-                // Look for read-related methods
                 if (!name.toLowerCase().contains("read")) continue;
                 if (name.toLowerCase().contains("power") || name.toLowerCase().contains("rssi")) continue;
                 
@@ -543,7 +669,6 @@ public class MivantaRfidPlugin extends Plugin {
         try {
             Method[] methods = UHFReader.class.getDeclaredMethods();
             
-            // Log all available methods for debugging
             StringBuilder methodList = new StringBuilder("Available methods: ");
             for (Method m : methods) {
                 methodList.append(m.getName()).append(", ");
@@ -553,18 +678,15 @@ public class MivantaRfidPlugin extends Plugin {
             for (Method method : methods) {
                 String name = method.getName().toLowerCase();
                 
-                // Look for any method that might read memory: read, getData, getMemory, etc.
                 if (!name.contains("read") && !name.contains("data") && !name.contains("memory") && !name.contains("bank")) {
                     continue;
                 }
                 
-                // Skip obvious non-memory methods
                 if (name.contains("power") || name.contains("rssi") || name.contains("temperature") ||
                     name.contains("version") || name.contains("listener") || name.contains("config")) {
                     continue;
                 }
                 
-                // Skip void methods
                 if (method.getReturnType() == void.class) continue;
                 
                 Class<?>[] paramTypes = method.getParameterTypes();
@@ -573,24 +695,20 @@ public class MivantaRfidPlugin extends Plugin {
                 
                 Object result = null;
                 
-                // Try invoking based on parameter count
                 try {
                     if (paramTypes.length == 3) {
-                        // (bank, addr, len) or (addr, len, bank)
                         result = method.invoke(uhfReader, memBank, startAddr, wordCount);
                     } else if (paramTypes.length == 4) {
-                        // Try password first, then bank/addr/len
                         if (paramTypes[0] == String.class) {
                             result = method.invoke(uhfReader, DEFAULT_PASSWORD, memBank, startAddr, wordCount);
                         } else {
                             result = method.invoke(uhfReader, memBank, startAddr, wordCount, DEFAULT_PASSWORD);
                         }
                     } else if (paramTypes.length == 5) {
-                        // Try with EPC filter
                         result = method.invoke(uhfReader, DEFAULT_PASSWORD, memBank, startAddr, wordCount, epc);
                     }
                 } catch (Exception e) {
-                    // Expected for many methods, just continue
+                    // Expected for many methods
                 }
                 
                 if (result != null) {
@@ -616,7 +734,6 @@ public class MivantaRfidPlugin extends Plugin {
         try {
             Log.d(TAG, "extractHexFromResult: type=" + result.getClass().getName());
             
-            // Handle UHFReaderResult<T>
             if (result instanceof UHFReaderResult) {
                 UHFReaderResult<?> readerResult = (UHFReaderResult<?>) result;
                 int code = readerResult.getResultCode();
@@ -639,27 +756,21 @@ public class MivantaRfidPlugin extends Plugin {
                     Log.d(TAG, "Data is String: " + data);
                     return (String) data;
                 } else if (data instanceof UHFTagEntity) {
-                    // Some SDKs return the tag entity with extra data
                     UHFTagEntity tagData = (UHFTagEntity) data;
                     String tagEpc = tagData.getEcpHex();
                     Log.d(TAG, "Data is UHFTagEntity, EPC: " + tagEpc);
-                    // Try to get any additional data through reflection
                     return tryExtractExtraDataFromTag(tagData);
                 } else {
-                    // Try to convert unknown types
                     String str = data.toString();
                     Log.d(TAG, "Data is unknown type, toString: " + str);
-                    // Check if it looks like hex
                     if (str.matches("^[0-9A-Fa-f]+$")) {
                         return str.toUpperCase();
                     }
                 }
             }
-            // Handle byte[] directly
             else if (result instanceof byte[]) {
                 return bytesToHex((byte[]) result);
             }
-            // Handle String directly
             else if (result instanceof String) {
                 String str = (String) result;
                 if (str.matches("^[0-9A-Fa-f]+$")) {
@@ -667,7 +778,6 @@ public class MivantaRfidPlugin extends Plugin {
                 }
                 return str;
             }
-            // Handle other types by looking for getData methods via reflection
             else {
                 try {
                     Method getDataMethod = result.getClass().getMethod("getData");
@@ -678,7 +788,6 @@ public class MivantaRfidPlugin extends Plugin {
                         return (String) data;
                     }
                 } catch (NoSuchMethodException e) {
-                    // No getData method, try toString
                     String str = result.toString();
                     if (str.matches("^[0-9A-Fa-f]+$")) {
                         return str.toUpperCase();
@@ -696,7 +805,6 @@ public class MivantaRfidPlugin extends Plugin {
      */
     private String tryExtractExtraDataFromTag(UHFTagEntity tag) {
         try {
-            // Look for getTid, getUserData, etc. methods
             Method[] methods = tag.getClass().getDeclaredMethods();
             for (Method m : methods) {
                 String name = m.getName().toLowerCase();
@@ -743,7 +851,6 @@ public class MivantaRfidPlugin extends Plugin {
         }
 
         try {
-            // Set up the inventory data listener
             uhfReader.setOnInventoryDataListener(new OnInventoryDataListener() {
                 @Override
                 public void onInventoryData(List<UHFTagEntity> tags) {
@@ -751,7 +858,6 @@ public class MivantaRfidPlugin extends Plugin {
                         for (UHFTagEntity tag : tags) {
                             if (tag != null) {
                                 JSObject tagData = new JSObject();
-                                // Note: SDK uses getEcpHex() not getEpc()
                                 tagData.put("epc", tag.getEcpHex());
                                 tagData.put("rssi", tag.getRssi());
                                 tagData.put("count", tag.getCount());
@@ -765,7 +871,6 @@ public class MivantaRfidPlugin extends Plugin {
                 }
             });
             
-            // Start inventory
             UHFReaderResult<Boolean> result = uhfReader.startInventory();
             Boolean started = result.getData();
             
@@ -862,6 +967,7 @@ public class MivantaRfidPlugin extends Plugin {
         response.put("connected", isConnected);
         response.put("scanning", isScanning);
         response.put("power", currentPower);
+        response.put("mode", currentMode);
         call.resolve(response);
     }
 

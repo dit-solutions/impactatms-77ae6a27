@@ -40,12 +40,12 @@ const hexToAscii = (hex: string): string => {
 /**
  * Scrollable list showing detected FASTag data with TID, EPC, and User fields
  */
-export function FastTagHistory({ 
+export const FastTagHistory = React.forwardRef<HTMLDivElement, FastTagHistoryProps>(({ 
   tags, 
   onClear, 
   onTagClick,
   maxHeight = '400px' 
-}: FastTagHistoryProps) {
+}, ref) => {
   const formatTime = (timestamp: number) => {
     return new Date(timestamp).toLocaleTimeString('en-US', {
       hour: '2-digit',
@@ -154,4 +154,5 @@ export function FastTagHistory({
       </ScrollArea>
     </div>
   );
-}
+});
+FastTagHistory.displayName = "FastTagHistory";
