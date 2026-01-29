@@ -30,7 +30,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.4'
+          gradle-version: '8.11.1'
 
       - name: Install dependencies
         run: npm install
@@ -43,7 +43,7 @@ jobs:
 
       - name: Generate Gradle wrapper
         working-directory: android
-        run: gradle wrapper --gradle-version 8.4 --distribution-type all
+        run: gradle wrapper --gradle-version 8.11.1 --distribution-type all
 
       - name: Build APK
         working-directory: android
