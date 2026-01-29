@@ -12,6 +12,7 @@ import com.xlzn.hcpda.uhf.UHFReader;
 import com.xlzn.hcpda.uhf.interfaces.OnInventoryDataListener;
 import com.xlzn.hcpda.uhf.entity.UHFTagEntity;
 import com.xlzn.hcpda.uhf.entity.UHFReaderResult;
+import com.xlzn.hcpda.uhf.entity.SelectEntity;
 import java.util.List;
 import java.lang.reflect.Method;
 
@@ -206,7 +207,7 @@ public class MivantaRfidPlugin extends Plugin {
                 String epc = tag.getEcpHex();
                 int rssi = tag.getRssi();
                 
-                // Try to read all memory banks
+                // Try to read all memory banks using direct SDK calls
                 String tid = tryReadMemoryBankDirect(MEMBANK_TID, 0, 6, epc);
                 String userData = tryReadMemoryBankDirect(MEMBANK_USER, 0, 32, epc);
                 
@@ -326,6 +327,19 @@ public class MivantaRfidPlugin extends Plugin {
                 methodsList.append("\n=== UHFTagEntity ===\n");
                 Method[] entityMethods = UHFTagEntity.class.getDeclaredMethods();
                 for (Method m : entityMethods) {
+                    methodsList.append(m.getName()).append("(");
+                    Class<?>[] params = m.getParameterTypes();
+                    for (int i = 0; i < params.length; i++) {
+                        if (i > 0) methodsList.append(", ");
+                        methodsList.append(params[i].getSimpleName());
+                    }
+                    methodsList.append(")\n");
+                }
+                
+                // SelectEntity methods  
+                methodsList.append("\n=== SelectEntity ===\n");
+                Method[] selectMethods = SelectEntity.class.getDeclaredMethods();
+                for (Method m : selectMethods) {
                     methodsList.append(m.getName()).append("(");
                     Class<?>[] params = m.getParameterTypes();
                     for (int i = 0; i < params.length; i++) {
@@ -505,7 +519,7 @@ public class MivantaRfidPlugin extends Plugin {
             
             Log.d(TAG, "readTagDetails: Tag found - EPC: " + epcFromInventory + ", RSSI: " + rssi);
             
-            // Read TID
+            // Read TID using direct SDK call
             String tid = tryReadMemoryBankDirect(MEMBANK_TID, 0, 6, epcFromInventory);
             Log.d(TAG, "TID read result: '" + tid + "'");
             
@@ -591,194 +605,72 @@ public class MivantaRfidPlugin extends Plugin {
         return result;
     }
     
+    /**
+     * Read memory bank using direct SDK call matching the manufacturer demo
+     * Uses: uhfReader.read(password, membank, address, wordCount, selectEntity)
+     */
     private String tryReadMemoryBankDirect(int memBank, int startAddr, int wordCount, String epc) {
-        String result = "";
-        
         Log.d(TAG, "tryReadMemoryBankDirect: bank=" + memBank + ", addr=" + startAddr + ", words=" + wordCount + ", epc=" + epc);
         
-        // Method 1: Try the documented 6-parameter Read method from SDK API
-        // Read(password, membank, address, wordCount, specifyLabel, filterEntity)
-        result = tryDocumentedReadMethod(memBank, startAddr, wordCount, epc);
-        if (result != null && !result.isEmpty()) {
-            Log.d(TAG, "Read success via documented method: " + result);
-            return result;
-        }
-        
-        // Method 2: Try with filter entity created from EPC
-        result = tryReadWithFilterEntity(memBank, startAddr, wordCount, epc);
-        if (result != null && !result.isEmpty()) {
-            Log.d(TAG, "Read success with filter entity: " + result);
-            return result;
-        }
-        
-        // Method 3: Fallback to reflection discovery
-        result = tryReadWithReflectionDiscovery(memBank, startAddr, wordCount, epc);
-        if (result != null && !result.isEmpty()) {
-            Log.d(TAG, "Read success via reflection: " + result);
-            return result;
-        }
-        
-        Log.w(TAG, "All read attempts failed for bank " + memBank);
-        return "";
-    }
-    
-    /**
-     * Try to read memory bank using reflection to find the correct Read method signature
-     * The SDK's Read method may have different signatures depending on version
-     */
-    private String tryDocumentedReadMethod(int memBank, int startAddr, int wordCount, String epc) {
         try {
-            Method[] methods = UHFReader.class.getDeclaredMethods();
+            // First try: Read with no filter (matching demo: read(pwd, bank, addr, count, null))
+            UHFReaderResult<String> result = uhfReader.read(
+                DEFAULT_PASSWORD, 
+                memBank, 
+                startAddr, 
+                wordCount, 
+                null  // No filter - read any tag in range
+            );
             
-            for (Method method : methods) {
-                String name = method.getName();
-                // Look specifically for "Read" method (case-sensitive as per SDK docs)
-                if (!name.equals("Read") && !name.equals("read")) continue;
+            if (result != null) {
+                Log.d(TAG, "Read result code: " + result.getResultCode() + ", message: " + result.getMessage());
                 
-                Class<?>[] paramTypes = method.getParameterTypes();
-                Log.d(TAG, "Found Read method with " + paramTypes.length + " params: " + getParamTypesString(paramTypes));
-                
-                Object readResult = null;
-                
-                try {
-                    // Try 6-param: Read(password, membank, address, wordCount, specifyLabel, filterEntity)
-                    if (paramTypes.length == 6) {
-                        readResult = method.invoke(uhfReader, DEFAULT_PASSWORD, memBank, startAddr, wordCount, false, null);
-                    }
-                    // Try 5-param: Read(password, membank, address, wordCount, filterEntity)
-                    else if (paramTypes.length == 5) {
-                        readResult = method.invoke(uhfReader, DEFAULT_PASSWORD, memBank, startAddr, wordCount, null);
-                    }
-                    // Try 4-param: Read(password, membank, address, wordCount)
-                    else if (paramTypes.length == 4 && paramTypes[0] == String.class) {
-                        readResult = method.invoke(uhfReader, DEFAULT_PASSWORD, memBank, startAddr, wordCount);
-                    }
-                    // Try 4-param alternate: Read(membank, address, wordCount, password)
-                    else if (paramTypes.length == 4 && paramTypes[0] == int.class) {
-                        readResult = method.invoke(uhfReader, memBank, startAddr, wordCount, DEFAULT_PASSWORD);
-                    }
-                    // Try 3-param: Read(membank, address, wordCount)
-                    else if (paramTypes.length == 3) {
-                        readResult = method.invoke(uhfReader, memBank, startAddr, wordCount);
-                    }
-                } catch (Exception e) {
-                    Log.d(TAG, "Read method invoke failed: " + e.getMessage());
-                    continue;
-                }
-                
-                if (readResult != null) {
-                    String hex = extractHexFromResult(readResult);
-                    if (hex != null && !hex.isEmpty() && !hex.matches("^0+$")) {
-                        Log.d(TAG, "Read success with " + paramTypes.length + "-param Read: " + hex);
-                        return hex;
+                if (result.getResultCode() == UHFReaderResult.ResultCode.CODE_SUCCESS) {
+                    String data = result.getData();
+                    if (data != null && !data.isEmpty() && !data.matches("^0+$")) {
+                        Log.d(TAG, "Read success (no filter): " + data);
+                        return data.toUpperCase();
                     }
                 }
             }
+            
+            // Second try: If we have EPC, try with SelectEntity filter for specific tag
+            if (epc != null && !epc.isEmpty()) {
+                Log.d(TAG, "Trying filtered read with EPC: " + epc);
+                
+                SelectEntity filter = new SelectEntity();
+                filter.setOption(4);  // 4=EPC filter (from demo)
+                filter.setAddress(32);  // EPC starts at bit 32 (word 2)
+                filter.setLength(epc.length() * 4);  // bits = hex chars * 4
+                filter.setData(epc);
+                
+                result = uhfReader.read(
+                    DEFAULT_PASSWORD, 
+                    memBank, 
+                    startAddr, 
+                    wordCount, 
+                    filter
+                );
+                
+                if (result != null) {
+                    Log.d(TAG, "Filtered read result code: " + result.getResultCode() + ", message: " + result.getMessage());
+                    
+                    if (result.getResultCode() == UHFReaderResult.ResultCode.CODE_SUCCESS) {
+                        String data = result.getData();
+                        if (data != null && !data.isEmpty() && !data.matches("^0+$")) {
+                            Log.d(TAG, "Filtered read success: " + data);
+                            return data.toUpperCase();
+                        }
+                    }
+                }
+            }
+            
         } catch (Exception e) {
-            Log.e(TAG, "tryDocumentedReadMethod error: " + e.getMessage(), e);
+            Log.e(TAG, "Read error for bank " + memBank + ": " + e.getMessage(), e);
         }
+        
+        Log.w(TAG, "Read failed for bank " + memBank);
         return "";
-    }
-    
-    private String getParamTypesString(Class<?>[] params) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < params.length; i++) {
-            if (i > 0) sb.append(", ");
-            sb.append(params[i].getSimpleName());
-        }
-        return sb.toString();
-    }
-    
-    /**
-     * Try reading with a filter entity to target a specific tag by EPC
-     * Uses reflection to find the correct method signature
-     */
-    private String tryReadWithFilterEntity(int memBank, int startAddr, int wordCount, String epc) {
-        if (epc == null || epc.isEmpty()) {
-            return "";
-        }
-        
-        try {
-            // Create filter entity and set EPC
-            UHFTagEntity filterEntity = new UHFTagEntity();
-            boolean epcSet = trySetEpcOnEntity(filterEntity, epc);
-            
-            if (!epcSet) {
-                Log.w(TAG, "Could not set EPC on filter entity, skipping filtered read");
-                return "";
-            }
-            
-            Method[] methods = UHFReader.class.getDeclaredMethods();
-            
-            for (Method method : methods) {
-                String name = method.getName();
-                if (!name.equals("Read") && !name.equals("read")) continue;
-                
-                Class<?>[] paramTypes = method.getParameterTypes();
-                Object readResult = null;
-                
-                try {
-                    // Try 6-param with filter: Read(password, membank, address, wordCount, specifyLabel, filterEntity)
-                    if (paramTypes.length == 6 && paramTypes[5] == UHFTagEntity.class) {
-                        readResult = method.invoke(uhfReader, DEFAULT_PASSWORD, memBank, startAddr, wordCount, true, filterEntity);
-                    }
-                    // Try 5-param with filter: Read(password, membank, address, wordCount, filterEntity)
-                    else if (paramTypes.length == 5 && paramTypes[4] == UHFTagEntity.class) {
-                        readResult = method.invoke(uhfReader, DEFAULT_PASSWORD, memBank, startAddr, wordCount, filterEntity);
-                    }
-                } catch (Exception e) {
-                    Log.d(TAG, "Filtered Read method invoke failed: " + e.getMessage());
-                    continue;
-                }
-                
-                if (readResult != null) {
-                    String hex = extractHexFromResult(readResult);
-                    if (hex != null && !hex.isEmpty() && !hex.matches("^0+$")) {
-                        Log.d(TAG, "Filtered Read success: " + hex);
-                        return hex;
-                    }
-                }
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "tryReadWithFilterEntity error: " + e.getMessage(), e);
-        }
-        return "";
-    }
-    
-    /**
-     * Try to set EPC on filter entity using reflection (method name may vary by SDK version)
-     */
-    private boolean trySetEpcOnEntity(UHFTagEntity entity, String epc) {
-        // Try common method names for setting EPC
-        String[] methodNames = {"setEpc", "setEcpHex", "setECP", "setEpcData", "setEcphex"};
-        
-        for (String methodName : methodNames) {
-            try {
-                Method setMethod = UHFTagEntity.class.getMethod(methodName, String.class);
-                setMethod.invoke(entity, epc);
-                Log.d(TAG, "Set EPC via " + methodName + ": " + epc);
-                return true;
-            } catch (NoSuchMethodException e) {
-                // Try next method name
-            } catch (Exception e) {
-                Log.w(TAG, "Error calling " + methodName + ": " + e.getMessage());
-            }
-        }
-        
-        // Also try byte array setters
-        try {
-            Method setMethod = UHFTagEntity.class.getMethod("setEpc", byte[].class);
-            setMethod.invoke(entity, hexToBytes(epc));
-            Log.d(TAG, "Set EPC via setEpc(byte[]): " + epc);
-            return true;
-        } catch (NoSuchMethodException e) {
-            // Method doesn't exist
-        } catch (Exception e) {
-            Log.w(TAG, "Error setting EPC bytes: " + e.getMessage());
-        }
-        
-        Log.w(TAG, "Could not find EPC setter on UHFTagEntity");
-        return false;
     }
     
     /**
@@ -793,132 +685,6 @@ public class MivantaRfidPlugin extends Plugin {
                                  + Character.digit(hex.charAt(i + 1), 16));
         }
         return data;
-    }
-    
-    private String tryReadWithReflectionDiscovery(int memBank, int startAddr, int wordCount, String epc) {
-        try {
-            Method[] methods = UHFReader.class.getDeclaredMethods();
-            
-            for (Method method : methods) {
-                String name = method.getName().toLowerCase();
-                
-                // Look for read-related methods
-                if (!name.contains("read") && !name.contains("data") && !name.contains("memory")) {
-                    continue;
-                }
-                // Skip unrelated methods
-                if (name.contains("power") || name.contains("rssi") || name.contains("listener")) {
-                    continue;
-                }
-                if (method.getReturnType() == void.class) continue;
-                
-                Class<?>[] paramTypes = method.getParameterTypes();
-                Object result = null;
-                
-                try {
-                    if (paramTypes.length == 3) {
-                        result = method.invoke(uhfReader, memBank, startAddr, wordCount);
-                    } else if (paramTypes.length == 4) {
-                        if (paramTypes[0] == String.class) {
-                            result = method.invoke(uhfReader, DEFAULT_PASSWORD, memBank, startAddr, wordCount);
-                        } else {
-                            result = method.invoke(uhfReader, memBank, startAddr, wordCount, DEFAULT_PASSWORD);
-                        }
-                    } else if (paramTypes.length == 5) {
-                        result = method.invoke(uhfReader, DEFAULT_PASSWORD, memBank, startAddr, wordCount, epc);
-                    }
-                } catch (Exception e) {
-                    // Expected for many methods - continue trying
-                }
-                
-                if (result != null) {
-                    String hex = extractHexFromResult(result);
-                    if (hex != null && !hex.isEmpty() && !hex.matches("^0+$")) {
-                        Log.d(TAG, "Discovery success with " + method.getName() + ": " + hex);
-                        return hex;
-                    }
-                }
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "Reflection discovery failed: " + e.getMessage());
-        }
-        return "";
-    }
-    
-    private String extractHexFromResult(Object result) {
-        if (result == null) return "";
-        
-        try {
-            if (result instanceof UHFReaderResult) {
-                UHFReaderResult<?> readerResult = (UHFReaderResult<?>) result;
-                Object data = readerResult.getData();
-                
-                if (data == null) return "";
-                
-                if (data instanceof byte[]) {
-                    return bytesToHex((byte[]) data);
-                } else if (data instanceof String) {
-                    return (String) data;
-                } else if (data instanceof UHFTagEntity) {
-                    return tryExtractExtraDataFromTag((UHFTagEntity) data);
-                } else {
-                    String str = data.toString();
-                    if (str.matches("^[0-9A-Fa-f]+$")) {
-                        return str.toUpperCase();
-                    }
-                }
-            }
-            else if (result instanceof byte[]) {
-                return bytesToHex((byte[]) result);
-            }
-            else if (result instanceof String) {
-                String str = (String) result;
-                if (str.matches("^[0-9A-Fa-f]+$")) {
-                    return str.toUpperCase();
-                }
-                return str;
-            }
-            else {
-                try {
-                    Method getDataMethod = result.getClass().getMethod("getData");
-                    Object data = getDataMethod.invoke(result);
-                    if (data instanceof byte[]) {
-                        return bytesToHex((byte[]) data);
-                    } else if (data instanceof String) {
-                        return (String) data;
-                    }
-                } catch (NoSuchMethodException e) {
-                    String str = result.toString();
-                    if (str.matches("^[0-9A-Fa-f]+$")) {
-                        return str.toUpperCase();
-                    }
-                }
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "extractHexFromResult error: " + e.getMessage());
-        }
-        return "";
-    }
-    
-    private String tryExtractExtraDataFromTag(UHFTagEntity tag) {
-        try {
-            Method[] methods = tag.getClass().getDeclaredMethods();
-            for (Method m : methods) {
-                String name = m.getName().toLowerCase();
-                if ((name.contains("tid") || name.contains("user") || name.contains("data")) && 
-                    m.getParameterCount() == 0) {
-                    Object val = m.invoke(tag);
-                    if (val instanceof byte[]) {
-                        return bytesToHex((byte[]) val);
-                    } else if (val instanceof String && !((String) val).isEmpty()) {
-                        return (String) val;
-                    }
-                }
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "tryExtractExtraDataFromTag error: " + e.getMessage());
-        }
-        return "";
     }
     
     private String bytesToHex(byte[] bytes) {
