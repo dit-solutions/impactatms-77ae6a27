@@ -41,6 +41,12 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      - name: Inspect SDK JAR structure
+        run: |
+          echo "=== Listing SDK JAR contents ==="
+          jar tf android/app/libs/HCUHF_v1.0.8_20250102.jar | grep -E "\.class$" | head -50
+          echo "=== End of JAR contents ==="
+
       - name: Generate Gradle wrapper
         working-directory: android
         run: gradle wrapper --gradle-version 8.11.1 --distribution-type all
