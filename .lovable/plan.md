@@ -1,240 +1,174 @@
 
 # Fix TID and User Memory Bank Reading
 
-## Problem Analysis
+## Root Cause Analysis
 
-The application can read EPC data successfully but fails to read TID (Tag Identifier) and User memory banks. After analyzing the Mivanta SDK documentation and comparing with the current implementation, I identified the root causes:
+After analyzing the manufacturer's demo code (`ReadFragment.java`), I found why the current implementation fails:
 
-### Current Issue
-The plugin uses reflection-based discovery to find and call read methods, but:
-1. It's not using the correct 6-parameter `Read` method signature documented in the API
-2. It may not be properly constructing the filter entity for targeted reads
-3. The demo app has a configuration option to read TID during inventory that we're not utilizing
+### Problems Identified
 
-### API Reference (from CX1500N documentation)
+| Issue | Current Implementation | Demo Code |
+|-------|----------------------|-----------|
+| Method name | Tries `Read` (capital R) and `read` via reflection | Uses `read` (lowercase) directly |
+| Parameters | Tries multiple signatures (3-6 params) | Uses exactly 5 parameters |
+| Filter class | Uses `UHFTagEntity` for filtering | Uses `SelectEntity` for filtering |
+| Result handling | Uses `getCode()` | Uses `getResultCode()` |
+| Result type | Expects various types | Returns `UHFReaderResult<String>` directly |
+
+### Correct API from Demo
+
 ```text
-UHFReader.getInstance().Read(
-    password,       // String: access password ("00000000")
-    membank,        // int: 0=Reserved, 1=EPC, 2=TID, 3=User
-    address,        // int: start address (0 for TID/User)
-    wordCount,      // int: number of words to read
-    specifyLabel,   // boolean: true to filter to specific tag
-    filterEntity    // UHFTagEntity: filter entity (can be null if specifyLabel=false)
+// The working read method signature:
+UHFReaderResult<String> result = UHFReader.getInstance().read(
+    password,      // String: "00000000"
+    membank,       // int: 0=Reserved, 1=EPC, 2=TID, 3=USER
+    address,       // int: start word address (typically 0)
+    wordCount,     // int: number of words to read
+    selectEntity   // SelectEntity: filter entity (can be null)
 );
+
+// Check result:
+if (result.getResultCode() == UHFReaderResult.ResultCode.CODE_SUCCESS) {
+    String hexData = result.getData();  // Already a hex string!
+}
 ```
 
 ---
 
-## Solution Overview
+## Solution
 
-Update the `MivantaRfidPlugin.java` to:
-1. Call the exact `Read` method documented in the SDK API with 6 parameters
-2. Properly create a filter entity from the inventory result to target the specific tag
-3. Add a fallback that tries reading without a filter if the filtered read fails
-4. Add better logging to diagnose what the SDK actually returns
+Replace the reflection-based approach with direct calls matching the demo code exactly.
 
----
+### Step 1: Add SelectEntity Import
 
-## Implementation Steps
-
-### Step 1: Update the Read Method Call
-Replace the reflection-based approach with a direct call to the documented `Read` method:
-
-```text
-Before: Uses reflection to guess method signatures
-After:  Directly calls UHFReader.getInstance().Read(password, membank, address, wordCount, specifyLabel, filterEntity)
+Add the missing import for the filter class:
+```java
+import com.xlzn.hcpda.uhf.entity.SelectEntity;
 ```
 
-### Step 2: Create Filter Entity from Inventory Result
-After performing `singleTagInventory()`, use the returned `UHFTagEntity` as the filter:
+### Step 2: Simplify tryReadMemoryBankDirect Method
 
-```text
-Approach:
-1. Perform inventory to get tag entity
-2. Use that entity as the filter parameter for Read
-3. Try with specifyLabel=true first (filter to this specific tag)
-4. If that fails, try with specifyLabel=false (read any tag in range)
-```
-
-### Step 3: Handle Multiple Return Types
-The `Read` method likely returns `UHFReaderResult<byte[]>` or `UHFReaderResult<String>`:
-
-```text
-- Check if result.getData() returns byte array -> convert to hex
-- Check if result.getData() returns String -> use directly
-- Log the actual return type for debugging
-```
-
-### Step 4: Add Configuration for TID+EPC Inventory Mode
-The demo documentation mentions a TID checkbox that makes inventory return TID+EPC. We should explore if there's a `setTidEpc()` or similar configuration method:
-
-```text
-- Check UHFReader for setTidMode, enableTid, setConfig methods
-- If available, enable TID reading during inventory
-```
-
----
-
-## Code Changes
-
-### File: `android/app/src/main/java/com/mivanta/rfid/MivantaRfidPlugin.java`
-
-**1. Update `tryReadMemoryBankDirect` method** to use the exact documented API:
+Replace the complex reflection logic with a direct call:
 
 ```java
 private String tryReadMemoryBankDirect(int memBank, int startAddr, int wordCount, String epc) {
-    String result = "";
-    
-    Log.d(TAG, "Reading memory bank " + memBank + " at address " + startAddr + " for " + wordCount + " words");
+    Log.d(TAG, "Reading bank=" + memBank + ", addr=" + startAddr + ", words=" + wordCount);
     
     try {
-        // Method 1: Try the documented 6-parameter Read method
-        // Read(password, membank, address, wordCount, specifyLabel, filterEntity)
-        
-        // Create filter entity if we have an EPC to filter by
-        UHFTagEntity filterEntity = null;
-        if (epc != null && !epc.isEmpty()) {
-            filterEntity = new UHFTagEntity();
-            // Try to set EPC on filter entity using reflection (method name may vary)
-            trySetEpcOnEntity(filterEntity, epc);
-        }
-        
-        // Try with filter first
-        UHFReaderResult<?> readResult = uhfReader.Read(
-            DEFAULT_PASSWORD,  // "00000000"
-            memBank,           // 2 for TID, 3 for USER
-            startAddr,         // typically 0
-            wordCount,         // number of words
-            filterEntity != null,  // specifyLabel
-            filterEntity           // filter entity
+        // Try with no filter first (matching demo: read(pwd, bank, addr, count, null))
+        UHFReaderResult<String> result = uhfReader.read(
+            DEFAULT_PASSWORD, 
+            memBank, 
+            startAddr, 
+            wordCount, 
+            null  // No filter - read any tag in range
         );
         
-        if (readResult != null && readResult.getData() != null) {
-            result = extractHexFromResult(readResult);
-            if (!result.isEmpty()) {
-                Log.d(TAG, "Read success with filter: " + result);
-                return result;
+        if (result != null && 
+            result.getResultCode() == UHFReaderResult.ResultCode.CODE_SUCCESS) {
+            String data = result.getData();
+            if (data != null && !data.isEmpty()) {
+                Log.d(TAG, "Read success: " + data);
+                return data;
             }
         }
         
-        // Try without filter
-        readResult = uhfReader.Read(
-            DEFAULT_PASSWORD,
-            memBank,
-            startAddr,
-            wordCount,
-            false,  // no filter
-            null    // no filter entity
-        );
-        
-        if (readResult != null) {
-            result = extractHexFromResult(readResult);
-            Log.d(TAG, "Read without filter: " + result);
+        // If we have EPC, try with SelectEntity filter
+        if (epc != null && !epc.isEmpty()) {
+            SelectEntity filter = new SelectEntity();
+            filter.setOption(4);  // 4=EPC filter (from demo)
+            filter.setAddress(32);  // EPC starts at word 2 (bit 32)
+            filter.setLength(epc.length() * 4);  // bits = hex chars * 4
+            filter.setData(epc);
+            
+            result = uhfReader.read(
+                DEFAULT_PASSWORD, 
+                memBank, 
+                startAddr, 
+                wordCount, 
+                filter
+            );
+            
+            if (result != null && 
+                result.getResultCode() == UHFReaderResult.ResultCode.CODE_SUCCESS) {
+                String data = result.getData();
+                if (data != null && !data.isEmpty()) {
+                    Log.d(TAG, "Filtered read success: " + data);
+                    return data;
+                }
+            }
         }
         
     } catch (Exception e) {
         Log.e(TAG, "Read error for bank " + memBank + ": " + e.getMessage(), e);
     }
     
-    return result != null ? result : "";
+    return "";
 }
 ```
 
-**2. Add helper method to set EPC on filter entity:**
+### Step 3: Remove Unused Reflection Methods
+
+Delete these methods as they're no longer needed:
+- `tryDocumentedReadMethod()` 
+- `tryReadWithFilterEntity()`
+- `trySetEpcOnEntity()`
+- `tryReadWithReflectionDiscovery()` (parts of it)
+- `getParamTypesString()`
+
+### Step 4: Update extractHexFromResult
+
+Simplify since we now know it returns `String`:
 
 ```java
-private void trySetEpcOnEntity(UHFTagEntity entity, String epc) {
-    try {
-        // Try common method names for setting EPC
-        String[] methodNames = {"setEpc", "setEcpHex", "setECP", "setEpcData"};
-        for (String methodName : methodNames) {
-            try {
-                Method setMethod = UHFTagEntity.class.getMethod(methodName, String.class);
-                setMethod.invoke(entity, epc);
-                Log.d(TAG, "Set EPC via " + methodName);
-                return;
-            } catch (NoSuchMethodException e) {
-                // Try next method name
-            }
-        }
-        
-        // Also try byte array setters
+private String extractHexFromResult(Object result) {
+    if (result == null) return "";
+    
+    // UHFReaderResult<String> - getData() returns String directly
+    if (result instanceof UHFReaderResult) {
         try {
-            Method setMethod = UHFTagEntity.class.getMethod("setEpc", byte[].class);
-            setMethod.invoke(entity, hexToBytes(epc));
-            Log.d(TAG, "Set EPC via setEpc(byte[])");
-        } catch (NoSuchMethodException e) {
-            Log.w(TAG, "Could not find EPC setter on UHFTagEntity");
+            UHFReaderResult<?> uhfResult = (UHFReaderResult<?>) result;
+            Object data = uhfResult.getData();
+            if (data instanceof String) {
+                return (String) data;
+            } else if (data instanceof byte[]) {
+                return bytesToHex((byte[]) data);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "extractHexFromResult error: " + e.getMessage());
         }
-    } catch (Exception e) {
-        Log.w(TAG, "Error setting EPC on filter entity: " + e.getMessage());
     }
+    
+    return result.toString();
 }
-```
-
-**3. Add hexToBytes conversion helper:**
-
-```java
-private byte[] hexToBytes(String hex) {
-    if (hex == null || hex.isEmpty()) return new byte[0];
-    int len = hex.length();
-    byte[] data = new byte[len / 2];
-    for (int i = 0; i < len; i += 2) {
-        data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
-                             + Character.digit(hex.charAt(i + 1), 16));
-    }
-    return data;
-}
-```
-
-**4. Update debug info to show UHFTagEntity methods:**
-
-```java
-// In getDebugInfo method, also enumerate UHFTagEntity methods
-StringBuilder entityMethods = new StringBuilder("\nUHFTagEntity methods:\n");
-try {
-    Method[] methods = UHFTagEntity.class.getDeclaredMethods();
-    for (Method m : methods) {
-        entityMethods.append(m.getName()).append("(");
-        Class<?>[] params = m.getParameterTypes();
-        for (int i = 0; i < params.length; i++) {
-            if (i > 0) entityMethods.append(", ");
-            entityMethods.append(params[i].getSimpleName());
-        }
-        entityMethods.append(")\n");
-    }
-} catch (Exception e) {
-    entityMethods.append("Error: ").append(e.getMessage());
-}
-response.put("entityMethods", entityMethods.toString());
 ```
 
 ---
 
-## Debugging Strategy
+## Files to Modify
 
-After implementing, if TID/User still returns empty:
-
-1. **Check Debug Panel**: The new `entityMethods` field will show available methods on `UHFTagEntity`
-2. **Check Logcat**: Look for "Read success" or "Read error" messages
-3. **Verify Read method exists**: The debug panel will confirm if `Read(String, int, int, int, boolean, UHFTagEntity)` signature is available
-
----
-
-## Verification Steps
-
-After building and deploying:
-1. Open the app and connect to the RFID reader
-2. Go to the Debug tab to verify the methods list includes `Read(...)`
-3. Press the hardware trigger button to scan a FASTag
-4. Check if TID and User data fields now populate with hex values
-5. If still empty, share the Logcat output or Debug panel contents
+**android/app/src/main/java/com/mivanta/rfid/MivantaRfidPlugin.java**
+- Add `SelectEntity` import
+- Rewrite `tryReadMemoryBankDirect()` to use direct API call
+- Remove unused reflection helper methods
+- Update debug logging
 
 ---
 
-## Technical Notes
+## Expected Outcome
 
-- **Word Size**: 1 word = 2 bytes = 4 hex characters
-- **TID Length**: Typically 6 words (12 bytes / 24 hex chars) for standard UHF tags
-- **User Length**: Varies by tag, start with 32 words, fall back to smaller sizes
-- **Address**: TID and USER typically start at address 0
+After implementation:
+1. **TID field** will populate with the chip identifier (24 hex characters)
+2. **User Data field** will populate with stored vehicle data (if present)
+3. **Faster reads** - no reflection overhead, direct SDK calls
+4. **Better error messages** - using proper `getResultCode()` checks
+
+---
+
+## Testing Steps
+
+1. Build and deploy the updated APK
+2. Connect to the RFID reader
+3. Press the hardware trigger button on a FASTag
+4. Verify TID and User data fields now show hex values
+5. Check the Debug panel for any error messages if fields are still empty
