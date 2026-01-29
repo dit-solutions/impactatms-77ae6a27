@@ -1,0 +1,60 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace "app.lovable.f68cb15949ce434d93731abbed2b0512"
+    compileSdk 34
+    
+    defaultConfig {
+        applicationId "app.lovable.f68cb15949ce434d93731abbed2b0512"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+    }
+    
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            debuggable true
+        }
+    }
+    
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    
+    // Include native .so libraries from jniLibs folder
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['src/main/jniLibs']
+        }
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+    flatDir {
+        dirs 'libs'
+    }
+}
+
+dependencies {
+    // Capacitor core
+    implementation project(':capacitor-android')
+    
+    // Include all JAR files from libs folder (for Mivanta SDK)
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    
+    // AndroidX dependencies
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.coordinatorlayout:coordinatorlayout:1.2.0'
+    implementation 'androidx.core:core-splashscreen:1.0.1'
+    
+    // WebView
+    implementation 'androidx.webkit:webkit:1.8.0'
+}
