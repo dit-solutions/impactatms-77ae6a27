@@ -60,7 +60,7 @@ export function FastTagHistory({
         <CreditCard className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
         <p className="text-sm text-muted-foreground">No FASTags detected yet</p>
         <p className="text-xs text-muted-foreground/70 mt-1">
-          Use "Read Details" to scan a FASTag
+          Scan a tag to see TID, EPC, and User data here
         </p>
       </div>
     );
