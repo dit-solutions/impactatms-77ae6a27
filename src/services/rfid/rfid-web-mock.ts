@@ -9,11 +9,13 @@ import type {
   RfidStatus,
   DebugInfoResult,
   ModeResult,
-  TriggerEventData
+  TriggerEventData,
+  TriggerScanResult
 } from './mivanta-rfid-plugin';
 
 type TagListenerCallback = (data: RfidTagData) => void;
 type TriggerListenerCallback = (data: TriggerEventData) => void;
+type TriggerScanResultCallback = (data: TriggerScanResult) => void;
 
 /**
  * Web mock implementation for development/testing
@@ -27,6 +29,7 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
   private tagListeners: TagListenerCallback[] = [];
   private triggerPressedListeners: TriggerListenerCallback[] = [];
   private triggerReleasedListeners: TriggerListenerCallback[] = [];
+  private triggerScanResultListeners: TriggerScanResultCallback[] = [];
   private scanInterval: ReturnType<typeof setInterval> | null = null;
 
   // Mock FASTag data with realistic TID, EPC, and User data
@@ -197,8 +200,8 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
   }
 
   async addListener(
-    eventName: 'tagDetected' | 'triggerPressed' | 'triggerReleased',
-    listenerFunc: TagListenerCallback | TriggerListenerCallback
+    eventName: 'tagDetected' | 'triggerPressed' | 'triggerReleased' | 'triggerScanResult',
+    listenerFunc: TagListenerCallback | TriggerListenerCallback | TriggerScanResultCallback
   ): Promise<{ remove: () => void }> {
     if (eventName === 'tagDetected') {
       this.tagListeners.push(listenerFunc as TagListenerCallback);
@@ -230,6 +233,16 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
           }
         }
       };
+    } else if (eventName === 'triggerScanResult') {
+      this.triggerScanResultListeners.push(listenerFunc as TriggerScanResultCallback);
+      return {
+        remove: () => {
+          const index = this.triggerScanResultListeners.indexOf(listenerFunc as TriggerScanResultCallback);
+          if (index > -1) {
+            this.triggerScanResultListeners.splice(index, 1);
+          }
+        }
+      };
     }
     return { remove: () => {} };
   }
@@ -238,6 +251,7 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
     this.tagListeners = [];
     this.triggerPressedListeners = [];
     this.triggerReleasedListeners = [];
+    this.triggerScanResultListeners = [];
   }
 
   private delay(ms: number): Promise<void> {

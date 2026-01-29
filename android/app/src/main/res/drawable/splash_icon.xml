@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Impact ATMS Splash Screen Icon - Stylized 'A' arrow -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="144dp"
+    android:height="144dp"
+    android:viewportWidth="144"
+    android:viewportHeight="144">
+    
+    <!-- Background circle -->
+    <path
+        android:fillColor="#464660"
+        android:pathData="M72,72m-72,0a72,72 0,1 1,144 0a72,72 0,1 1,-144 0"/>
+    
+    <!-- Arrow/A shape - Golden Amber -->
+    <path
+        android:fillColor="#FAAC0A"
+        android:pathData="M72,28 L108,100 C108,100 95,95 82,95 L72,75 L62,95 C49,95 36,100 36,100 L72,28 Z
+                          M52,80 C58,72 66,60 72,50 C78,60 86,72 92,80 C86,78 79,76 72,76 C65,76 58,78 52,80 Z"/>
+    
+    <!-- Upper road lines -->
+    <path
+        android:fillColor="#464660"
+        android:pathData="M60,40 L72,58 L84,40 L80,36 L72,48 L64,36 Z"/>
+</vector>
