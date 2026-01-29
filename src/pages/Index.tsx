@@ -1,9 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { RfidReaderPanel, RfidDebugPanel } from '@/components/rfid';
+import { RfidReaderPanel } from '@/components/rfid';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Scan, Bug, Settings } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import type { RfidTagData } from '@/services/rfid';
 
 const Index = () => {
@@ -31,26 +30,7 @@ const Index = () => {
           </div>
         </header>
         
-        <Tabs defaultValue="scanner" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-4">
-            <TabsTrigger value="scanner">
-              <Scan className="h-4 w-4 mr-2" />
-              Scanner
-            </TabsTrigger>
-            <TabsTrigger value="debug">
-              <Bug className="h-4 w-4 mr-2" />
-              Debug
-            </TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="scanner">
-            <RfidReaderPanel onTagDetected={handleTagDetected} />
-          </TabsContent>
-          
-          <TabsContent value="debug">
-            <RfidDebugPanel />
-          </TabsContent>
-        </Tabs>
+        <RfidReaderPanel onTagDetected={handleTagDetected} />
       </div>
     </div>
   );
