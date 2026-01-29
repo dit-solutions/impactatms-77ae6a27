@@ -19,6 +19,7 @@ interface UseRfidReaderReturn {
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   readSingle: () => Promise<void>;
+  readSingleWithDetails: () => Promise<void>;
   readTagDetails: () => Promise<FastTagData | null>;
   startContinuous: () => Promise<void>;
   stopContinuous: () => Promise<void>;
@@ -104,6 +105,64 @@ export function useRfidReader(
     }
   }, []);
 
+  /**
+   * Read single tag AND attempt to read FASTag details
+   * This populates both Raw Data and FASTag tabs
+   */
+  const readSingleWithDetails = useCallback(async () => {
+    // First try to read full FASTag details (includes EPC)
+    const fastTag = await rfidService.readTagDetails();
+    
+    if (fastTag) {
+      // Add to FASTag history
+      setLastFastTag(fastTag);
+      setFastTagHistory(prev => [fastTag, ...prev].slice(0, 100));
+      
+      // Also add to basic tag history (Raw Data)
+      const basicTag: RfidTagData = {
+        epc: fastTag.epc,
+        rssi: fastTag.rssi,
+        timestamp: fastTag.timestamp
+      };
+      setLastTag(basicTag);
+      setTagHistory(prev => [basicTag, ...prev].slice(0, 100));
+      onTagDetected?.(basicTag);
+      
+      // Show what we got
+      const hasAllData = fastTag.tid && fastTag.userData;
+      const hasTidOnly = fastTag.tid && !fastTag.userData;
+      const hasUserOnly = !fastTag.tid && fastTag.userData;
+      
+      if (hasAllData) {
+        toast({
+          title: 'FASTag Read Complete',
+          description: `TID, EPC, and User data captured`
+        });
+      } else if (hasTidOnly) {
+        toast({
+          title: 'FASTag Read (Partial)',
+          description: `TID and EPC captured. User data not available.`
+        });
+      } else if (hasUserOnly) {
+        toast({
+          title: 'FASTag Read (Partial)',
+          description: `EPC and User data captured. TID not available.`
+        });
+      } else {
+        toast({
+          title: 'Tag Detected',
+          description: `EPC only - TID/User banks may be protected`
+        });
+      }
+    } else {
+      toast({
+        title: 'No Tag Found',
+        description: 'Hold tag closer and try again',
+        variant: 'destructive'
+      });
+    }
+  }, [onTagDetected]);
+
   const readTagDetails = useCallback(async (): Promise<FastTagData | null> => {
     const fastTag = await rfidService.readTagDetails();
     if (fastTag) {
@@ -157,6 +216,7 @@ export function useRfidReader(
     connect,
     disconnect,
     readSingle,
+    readSingleWithDetails,
     readTagDetails,
     startContinuous,
     stopContinuous,
