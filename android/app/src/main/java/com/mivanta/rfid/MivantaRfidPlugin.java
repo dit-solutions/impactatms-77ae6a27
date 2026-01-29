@@ -176,62 +176,97 @@ public class MivantaRfidPlugin extends Plugin {
             return;
         }
         
-        try {
-            if (uhfReader == null) {
-                Log.d(TAG, "uhfReader is null, calling getInstance()");
-                uhfReader = UHFReader.getInstance();
-            }
+        // Run connection in background thread to allow retries with delays
+        new Thread(() -> {
+            try {
+                if (uhfReader == null) {
+                    Log.d(TAG, "uhfReader is null, calling getInstance()");
+                    uhfReader = UHFReader.getInstance();
+                }
 
-            if (uhfReader == null) {
-                Log.e(TAG, "UHFReader.getInstance() returned null");
-                call.reject("UHF reader not available (getInstance returned null)");
-                return;
-            }
-            
-            Log.d(TAG, "Calling uhfReader.connect()...");
-            // Connect to the UHF reader (v1.1.0 API takes no arguments)
-            UHFReaderResult<Boolean> result = uhfReader.connect();
-
-            if (result == null) {
-                Log.e(TAG, "uhfReader.connect(...) returned null result");
-                call.reject("Failed to connect: null result from SDK");
-                return;
-            }
-
-            Boolean success = result.getData();
-            
-            if (success != null && success) {
-                isConnected = true;
-
-                // Best-effort: set default power level (do not crash if SDK returns error)
-                try {
-                    UHFReaderResult<Boolean> powerResult = uhfReader.setPower(currentPower);
-                    if (powerResult == null) {
-                        Log.w(TAG, "setPower returned null result");
-                    } else {
-                        Log.d(TAG, "setPower(" + currentPower + ") => code=" + powerResult.getResultCode() + ", msg=" + powerResult.getMessage());
-                    }
-                } catch (Throwable t) {
-                    // Use Throwable to catch UnsatisfiedLinkError and other linkage issues
-                    Log.e(TAG, "setPower threw: " + t.getMessage(), t);
+                if (uhfReader == null) {
+                    Log.e(TAG, "UHFReader.getInstance() returned null");
+                    getActivity().runOnUiThread(() -> 
+                        call.reject("UHF reader not available (getInstance returned null)")
+                    );
+                    return;
                 }
                 
-                JSObject response = new JSObject();
-                response.put("connected", true);
-                response.put("message", "UHF Reader connected successfully");
-                call.resolve(response);
+                // Retry logic for SDK warm-up timing issues
+                int maxRetries = 3;
+                int retryDelayMs = 500;
+                boolean connected = false;
+                String lastError = "Unknown error";
                 
-                Log.d(TAG, "UHF Reader connected");
-            } else {
-                String errorMsg = result.getMessage();
-                Log.e(TAG, "Failed to connect: " + errorMsg);
-                call.reject("Failed to connect to UHF Reader: " + errorMsg);
+                for (int attempt = 1; attempt <= maxRetries && !connected; attempt++) {
+                    Log.d(TAG, "Connection attempt " + attempt + "/" + maxRetries);
+                    
+                    // Small delay before first attempt to let SDK warm up
+                    if (attempt == 1) {
+                        try {
+                            Thread.sleep(200);
+                        } catch (InterruptedException ignored) {}
+                    }
+                    
+                    UHFReaderResult<Boolean> result = uhfReader.connect();
+                    
+                    if (result == null) {
+                        lastError = "null result from SDK";
+                        Log.w(TAG, "Attempt " + attempt + ": connect() returned null");
+                    } else {
+                        Boolean success = result.getData();
+                        if (success != null && success) {
+                            connected = true;
+                            Log.d(TAG, "Connected successfully on attempt " + attempt);
+                        } else {
+                            lastError = result.getMessage() != null ? result.getMessage() : "null";
+                            Log.w(TAG, "Attempt " + attempt + " failed: " + lastError);
+                        }
+                    }
+                    
+                    // Wait before retry (except on last attempt or if connected)
+                    if (!connected && attempt < maxRetries) {
+                        try {
+                            Thread.sleep(retryDelayMs);
+                            retryDelayMs *= 1.5; // Exponential backoff
+                        } catch (InterruptedException ignored) {}
+                    }
+                }
+                
+                if (connected) {
+                    isConnected = true;
+
+                    // Best-effort: set default power level (do not crash if SDK returns error)
+                    try {
+                        UHFReaderResult<Boolean> powerResult = uhfReader.setPower(currentPower);
+                        if (powerResult == null) {
+                            Log.w(TAG, "setPower returned null result");
+                        } else {
+                            Log.d(TAG, "setPower(" + currentPower + ") => code=" + powerResult.getResultCode() + ", msg=" + powerResult.getMessage());
+                        }
+                    } catch (Throwable t) {
+                        Log.e(TAG, "setPower threw: " + t.getMessage(), t);
+                    }
+                    
+                    JSObject response = new JSObject();
+                    response.put("connected", true);
+                    response.put("message", "UHF Reader connected successfully");
+                    
+                    getActivity().runOnUiThread(() -> call.resolve(response));
+                    Log.d(TAG, "UHF Reader connected");
+                } else {
+                    Log.e(TAG, "All connection attempts failed. Last error: " + lastError);
+                    final String errorMsg = lastError;
+                    getActivity().runOnUiThread(() -> 
+                        call.reject("Failed to connect to UHF Reader after 3 attempts: " + errorMsg)
+                    );
+                }
+            } catch (Throwable t) {
+                Log.e(TAG, "Connection fatal error: " + t.getMessage(), t);
+                final String msg = t.getMessage();
+                getActivity().runOnUiThread(() -> call.reject("Connection error: " + msg));
             }
-        } catch (Throwable t) {
-            // Throwable to catch native linkage errors that would otherwise crash the app
-            Log.e(TAG, "Connection fatal error: " + t.getMessage(), t);
-            call.reject("Connection error: " + t.getMessage());
-        }
+        }).start();
     }
 
     @PluginMethod
