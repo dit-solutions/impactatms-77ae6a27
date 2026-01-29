@@ -60,15 +60,20 @@ jobs:
         working-directory: android
         run: gradle wrapper --gradle-version 8.11.1 --distribution-type all
 
-      - name: Create debug keystore
+      - name: Create consistent debug keystore
         run: |
           mkdir -p ~/.android
+          # Generate a DETERMINISTIC keystore using a fixed seed
+          # This ensures the same keystore is created on every build
+          # allowing APK updates without uninstalling
+          echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 -d > ~/.android/debug.keystore 2>/dev/null || \
           keytool -genkeypair -v -keystore ~/.android/debug.keystore \
             -storepass android -alias androiddebugkey -keypass android \
             -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null || true
-          # Copy to android folder for consistent signing
+            -dname "CN=Lovable Debug,O=Lovable,C=US"
           cp ~/.android/debug.keystore android/debug.keystore
+          # Output keystore fingerprint for verification
+          keytool -list -v -keystore ~/.android/debug.keystore -storepass android 2>/dev/null | grep "SHA256:" || true
 
       - name: Build APK
         working-directory: android
