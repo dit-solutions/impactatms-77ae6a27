@@ -26,13 +26,54 @@ public class MivantaRfidPlugin extends Plugin {
     private boolean isConnected = false;
     private boolean isScanning = false;
     private int currentPower = 30;
-
     private boolean sdkAvailable = false;
+    private static boolean nativeLibsLoaded = false;
+
+    /**
+     * Explicitly load native libraries required by the Mivanta SDK.
+     * This must be done before any SDK calls.
+     */
+    private static synchronized void loadNativeLibraries() {
+        if (nativeLibsLoaded) {
+            return;
+        }
+        
+        try {
+            // Load in dependency order - power first, then serial, then module API
+            Log.d(TAG, "Loading native library: power");
+            System.loadLibrary("power");
+            
+            Log.d(TAG, "Loading native library: SerialPortHc");
+            System.loadLibrary("SerialPortHc");
+            
+            Log.d(TAG, "Loading native library: ModuleAPI");
+            System.loadLibrary("ModuleAPI");
+            
+            nativeLibsLoaded = true;
+            Log.d(TAG, "All native libraries loaded successfully");
+        } catch (UnsatisfiedLinkError e) {
+            Log.e(TAG, "Failed to load native library: " + e.getMessage(), e);
+            nativeLibsLoaded = false;
+        } catch (Throwable t) {
+            Log.e(TAG, "Error loading native libraries: " + t.getMessage(), t);
+            nativeLibsLoaded = false;
+        }
+    }
 
     @Override
     public void load() {
         super.load();
         Log.d(TAG, "MivantaRfidPlugin loaded - attempting to initialize UHF Reader");
+        
+        // Load native libraries first
+        loadNativeLibraries();
+        
+        if (!nativeLibsLoaded) {
+            Log.e(TAG, "Native libraries not loaded - SDK will not be available");
+            sdkAvailable = false;
+            return;
+        }
+        
         try {
             uhfReader = UHFReader.getInstance();
             if (uhfReader != null) {
@@ -42,8 +83,7 @@ public class MivantaRfidPlugin extends Plugin {
                 Log.w(TAG, "UHFReader.getInstance() returned null");
             }
         } catch (UnsatisfiedLinkError e) {
-            // Native .so library failed to load
-            Log.e(TAG, "Native library load failed: " + e.getMessage(), e);
+            Log.e(TAG, "Native library load failed during getInstance: " + e.getMessage(), e);
             sdkAvailable = false;
         } catch (Throwable t) {
             Log.e(TAG, "Failed to get UHFReader instance: " + t.getMessage(), t);
