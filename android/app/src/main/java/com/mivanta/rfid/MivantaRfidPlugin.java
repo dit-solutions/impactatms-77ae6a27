@@ -27,23 +27,44 @@ public class MivantaRfidPlugin extends Plugin {
     private boolean isScanning = false;
     private int currentPower = 30;
 
+    private boolean sdkAvailable = false;
+
     @Override
     public void load() {
         super.load();
-        Log.d(TAG, "MivantaRfidPlugin loaded - initializing UHF Reader");
+        Log.d(TAG, "MivantaRfidPlugin loaded - attempting to initialize UHF Reader");
         try {
             uhfReader = UHFReader.getInstance();
-            Log.d(TAG, "UHFReader instance obtained successfully");
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to get UHFReader instance: " + e.getMessage());
+            if (uhfReader != null) {
+                sdkAvailable = true;
+                Log.d(TAG, "UHFReader instance obtained successfully");
+            } else {
+                Log.w(TAG, "UHFReader.getInstance() returned null");
+            }
+        } catch (UnsatisfiedLinkError e) {
+            // Native .so library failed to load
+            Log.e(TAG, "Native library load failed: " + e.getMessage(), e);
+            sdkAvailable = false;
+        } catch (Throwable t) {
+            Log.e(TAG, "Failed to get UHFReader instance: " + t.getMessage(), t);
+            sdkAvailable = false;
         }
     }
 
     @PluginMethod
     public void connect(PluginCall call) {
+        Log.d(TAG, "connect() called, sdkAvailable=" + sdkAvailable);
+        
+        // Check if SDK loaded at all
+        if (!sdkAvailable) {
+            Log.e(TAG, "SDK not available - native libraries may have failed to load");
+            call.reject("RFID SDK not available. Native libraries may not be compatible with this device.");
+            return;
+        }
+        
         try {
-            Log.d(TAG, "connect() called");
             if (uhfReader == null) {
+                Log.d(TAG, "uhfReader is null, calling getInstance()");
                 uhfReader = UHFReader.getInstance();
             }
 
@@ -53,6 +74,7 @@ public class MivantaRfidPlugin extends Plugin {
                 return;
             }
             
+            Log.d(TAG, "Calling uhfReader.connect(context)...");
             // Connect using Android Context
             UHFReaderResult<Boolean> result = uhfReader.connect(getContext());
 
