@@ -128,6 +128,42 @@ public class MivantaRfidPlugin extends Plugin {
             Log.w(TAG, "Could not enumerate methods: " + e.getMessage());
         }
     }
+    
+    /**
+     * Get debug information including SDK methods (accessible from UI)
+     */
+    @PluginMethod
+    public void getDebugInfo(PluginCall call) {
+        JSObject response = new JSObject();
+        response.put("sdkAvailable", sdkAvailable);
+        response.put("nativeLibsLoaded", nativeLibsLoaded);
+        response.put("isConnected", isConnected);
+        
+        StringBuilder methodsList = new StringBuilder();
+        
+        if (sdkAvailable && uhfReader != null) {
+            try {
+                Method[] methods = UHFReader.class.getDeclaredMethods();
+                for (Method m : methods) {
+                    methodsList.append(m.getName()).append("(");
+                    Class<?>[] params = m.getParameterTypes();
+                    for (int i = 0; i < params.length; i++) {
+                        if (i > 0) methodsList.append(", ");
+                        methodsList.append(params[i].getSimpleName());
+                    }
+                    methodsList.append(")\n");
+                }
+            } catch (Exception e) {
+                methodsList.append("Error: ").append(e.getMessage());
+            }
+        } else {
+            methodsList.append("SDK not available or reader is null");
+        }
+        
+        response.put("methods", methodsList.toString());
+        call.resolve(response);
+        Log.d(TAG, "getDebugInfo called - returning SDK methods");
+    }
 
     @PluginMethod
     public void connect(PluginCall call) {
