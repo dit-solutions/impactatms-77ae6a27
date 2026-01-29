@@ -7,17 +7,33 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
-// Mivanta SDK imports
-import com.mivanta.uhf.UHFReader;
-import com.mivanta.uhf.listener.OnInventoryDataListener;
-import com.mivanta.uhf.bean.InventoryData;
+/**
+ * Mivanta RFID Plugin for Capacitor
+ * 
+ * TODO: Replace mock implementation with real SDK calls once package names are confirmed.
+ * 
+ * To find the correct package names, run this command on the JAR file:
+ *   jar tf HCUHF_v1.0.8_20250102.jar | grep -E "\.class$" | head -20
+ * 
+ * This will show the actual class structure like:
+ *   com/xxx/uhf/UHFReader.class
+ *   com/xxx/uhf/listener/OnInventoryListener.class
+ * 
+ * Then update the imports below accordingly.
+ */
+
+// TODO: Uncomment and fix these imports based on actual JAR package structure
+// import com.xxx.uhf.UHFReader;
+// import com.xxx.uhf.listener.OnInventoryDataListener;
+// import com.xxx.uhf.bean.InventoryData;
 
 @CapacitorPlugin(name = "MivantaRfid")
 public class MivantaRfidPlugin extends Plugin {
 
     private static final String TAG = "MivantaRfidPlugin";
     
-    private UHFReader uhfReader;
+    // TODO: Uncomment once correct class name is found
+    // private UHFReader uhfReader;
     private boolean isConnected = false;
     private boolean isScanning = false;
     private int currentPower = 30; // Default power level (dBm)
@@ -26,24 +42,23 @@ public class MivantaRfidPlugin extends Plugin {
     public void load() {
         super.load();
         Log.d(TAG, "MivantaRfidPlugin loaded");
-        // Initialize reader instance
-        uhfReader = UHFReader.getInstance();
+        // TODO: Initialize reader instance
+        // uhfReader = UHFReader.getInstance();
     }
 
     /**
      * Connect to the UHF RFID module
-     * Called when app starts or user manually connects
      */
     @PluginMethod
     public void connect(PluginCall call) {
         try {
-            // Connect to serial port - adjust path/baud if needed for CX1500N
-            boolean success = uhfReader.connect("/dev/ttyS4", 115200);
+            // TODO: Replace with real SDK call
+            // boolean success = uhfReader.connect("/dev/ttyS4", 115200);
+            boolean success = true; // Mock for now
             
             if (success) {
                 isConnected = true;
-                // Set initial power level
-                uhfReader.setPower(currentPower);
+                // uhfReader.setPower(currentPower);
                 
                 JSObject result = new JSObject();
                 result.put("connected", true);
@@ -62,17 +77,16 @@ public class MivantaRfidPlugin extends Plugin {
 
     /**
      * Disconnect from the UHF RFID module
-     * Important: Call this when app closes to prevent battery drain
      */
     @PluginMethod
     public void disconnect(PluginCall call) {
         try {
             if (isScanning) {
-                uhfReader.stopInventory();
+                // uhfReader.stopInventory();
                 isScanning = false;
             }
             
-            uhfReader.disConnect();
+            // uhfReader.disConnect();
             isConnected = false;
             
             JSObject result = new JSObject();
@@ -89,7 +103,6 @@ public class MivantaRfidPlugin extends Plugin {
 
     /**
      * Perform a single tag read
-     * Returns immediately with one tag (or error if none found)
      */
     @PluginMethod
     public void readSingle(PluginCall call) {
@@ -99,7 +112,9 @@ public class MivantaRfidPlugin extends Plugin {
         }
 
         try {
-            String epc = uhfReader.singleTagInventory();
+            // TODO: Replace with real SDK call
+            // String epc = uhfReader.singleTagInventory();
+            String epc = "MOCK_EPC_" + System.currentTimeMillis();
             
             if (epc != null && !epc.isEmpty()) {
                 JSObject result = new JSObject();
@@ -120,7 +135,6 @@ public class MivantaRfidPlugin extends Plugin {
 
     /**
      * Start continuous inventory scanning
-     * Tags are emitted via 'tagDetected' event
      */
     @PluginMethod
     public void startContinuous(PluginCall call) {
@@ -135,6 +149,8 @@ public class MivantaRfidPlugin extends Plugin {
         }
 
         try {
+            // TODO: Replace with real SDK listener
+            /*
             uhfReader.setOnInventoryDataListener(new OnInventoryDataListener() {
                 @Override
                 public void onInventoryData(InventoryData data) {
@@ -143,12 +159,12 @@ public class MivantaRfidPlugin extends Plugin {
                     tagData.put("rssi", data.getRssi());
                     tagData.put("count", data.getCount());
                     tagData.put("timestamp", System.currentTimeMillis());
-                    
                     notifyListeners("tagDetected", tagData);
                 }
             });
-            
             boolean started = uhfReader.startInventory();
+            */
+            boolean started = true;
             
             if (started) {
                 isScanning = true;
@@ -159,6 +175,9 @@ public class MivantaRfidPlugin extends Plugin {
                 call.resolve(result);
                 
                 Log.d(TAG, "Continuous scanning started");
+                
+                // Mock tag simulation for testing
+                simulateTagReads();
             } else {
                 call.reject("Failed to start scanning");
             }
@@ -182,7 +201,7 @@ public class MivantaRfidPlugin extends Plugin {
         }
 
         try {
-            uhfReader.stopInventory();
+            // uhfReader.stopInventory();
             isScanning = false;
             
             JSObject result = new JSObject();
@@ -198,8 +217,7 @@ public class MivantaRfidPlugin extends Plugin {
     }
 
     /**
-     * Set the reader power level (affects read range)
-     * @param power Power level in dBm (typically 5-33)
+     * Set the reader power level
      */
     @PluginMethod
     public void setPower(PluginCall call) {
@@ -210,14 +228,13 @@ public class MivantaRfidPlugin extends Plugin {
 
         int power = call.getInt("power", 30);
         
-        // Validate power range
         if (power < 5 || power > 33) {
             call.reject("Power must be between 5 and 33 dBm");
             return;
         }
 
         try {
-            uhfReader.setPower(power);
+            // uhfReader.setPower(power);
             currentPower = power;
             
             JSObject result = new JSObject();
@@ -244,15 +261,47 @@ public class MivantaRfidPlugin extends Plugin {
         call.resolve(result);
     }
 
+    /**
+     * Mock tag simulation for testing without hardware
+     */
+    private void simulateTagReads() {
+        new Thread(() -> {
+            String[] mockEpcs = {
+                "E200001234567890ABCD",
+                "E200009876543210EFGH",
+                "E200005555666677778888"
+            };
+            int index = 0;
+            
+            while (isScanning) {
+                try {
+                    Thread.sleep(2000);
+                    
+                    if (isScanning) {
+                        JSObject tagData = new JSObject();
+                        tagData.put("epc", mockEpcs[index % mockEpcs.length]);
+                        tagData.put("rssi", -45 + (int)(Math.random() * 20));
+                        tagData.put("count", 1);
+                        tagData.put("timestamp", System.currentTimeMillis());
+                        
+                        notifyListeners("tagDetected", tagData);
+                        index++;
+                    }
+                } catch (InterruptedException e) {
+                    break;
+                }
+            }
+        }).start();
+    }
+
     @Override
     protected void handleOnDestroy() {
-        // Clean up when plugin is destroyed
         if (isScanning) {
             isScanning = false;
-            uhfReader.stopInventory();
+            // uhfReader.stopInventory();
         }
         if (isConnected) {
-            uhfReader.disConnect();
+            // uhfReader.disConnect();
             isConnected = false;
         }
         super.handleOnDestroy();
