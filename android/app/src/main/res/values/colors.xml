@@ -10,6 +10,6 @@
     <!-- App icon background - white for app drawer visibility -->
     <color name="ic_launcher_background">#FFFFFF</color>
     
-    <!-- Splash screen background -->
-    <color name="splash_background">#464660</color>
+    <!-- Splash screen background - white to match app icon -->
+    <color name="splash_background">#FFFFFF</color>
 </resources>
