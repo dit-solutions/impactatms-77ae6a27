@@ -1,79 +1,79 @@
 
-# Fix App Icon and Splash Screen
 
-## Issues Identified
+# Fix App Icon and Splash Screen with Exact Logos
 
-### Issue 1: App Icon Shows Default Android Icon
+## Summary
 
-The adaptive icon XML files have an incorrect configuration:
-
-**Current (Broken):**
-```xml
-<!-- ic_launcher.xml -->
-<adaptive-icon>
-    <background android:drawable="@color/ic_launcher_background"/>
-    <foreground android:drawable="@mipmap/ic_launcher"/>  <!-- WRONG: Self-reference! -->
-</adaptive-icon>
-```
-
-The foreground is referencing `@mipmap/ic_launcher` which creates a circular reference - the icon file points to itself. On Android 8+ (API 26+), adaptive icons require:
-- A **background** (color or image)
-- A **foreground** (the actual icon image, typically with transparency)
-
-The foreground should reference `@drawable/ic_launcher_foreground` (which exists in the drawable folder).
-
-### Issue 2: Splash Screen Not Showing Logo
-
-The Activity theme in `AndroidManifest.xml` uses `AppTheme.NoActionBar` but the splash theme `AppTheme.Splash` is never applied:
-
-```xml
-<!-- Current: Uses AppTheme.NoActionBar - no splash configuration -->
-<activity android:theme="@style/AppTheme.NoActionBar">
-```
-
-The `SplashScreen.installSplashScreen()` in MainActivity requires the activity to start with the splash theme.
+Use your exact uploaded logo files with proper backgrounds:
+- **App Icon**: K swoosh on **white background**
+- **Splash Screen**: Full IMPACT TMS logo on **dark slate background** (#464660)
 
 ---
 
-## Solution
+## Assets to Use (Exact Files - No Modifications)
 
-### Step 1: Fix Adaptive Icon XMLs
+| Asset | Source File | Destination |
+|-------|-------------|-------------|
+| App Icon Foreground | `Impact_TMS_Logo_Design-11.png` (K swoosh) | `android/app/src/main/res/drawable/ic_launcher_foreground.png` |
+| Splash Logo | `Impact_TMS_Logo_Design-15.png` (Full logo) | `android/app/src/main/res/drawable/splash_logo.png` |
 
-**File: `android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`**
+---
+
+## Configuration Changes
+
+### Step 1: Change App Icon Background to White
+
+**File**: `android/app/src/main/res/values/colors.xml`
+
+```xml
+<!-- Change from dark slate to white -->
+<color name="ic_launcher_background">#FFFFFF</color>
+
+<!-- Keep splash screen dark slate -->
+<color name="splash_background">#464660</color>
+```
+
+### Step 2: Copy Your Exact Logo Files
+
+1. Copy `Impact_TMS_Logo_Design-11.png` (K swoosh) to:
+   - `android/app/src/main/res/drawable/ic_launcher_foreground.png`
+
+2. Copy `Impact_TMS_Logo_Design-15.png` (Full IMPACT TMS) to:
+   - `android/app/src/main/res/drawable/splash_logo.png`
+
+### Step 3: Adjust Splash Logo Dimensions
+
+**File**: `android/app/src/main/res/drawable/splash.xml`
+
+Update the size to fit the text logo's wider aspect ratio:
+
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
-<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/ic_launcher_background"/>
-    <foreground android:drawable="@drawable/ic_launcher_foreground"/>
-</adaptive-icon>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/splash_background"/>
+    <item
+        android:gravity="center"
+        android:drawable="@drawable/splash_logo"
+        android:width="280dp"
+        android:height="120dp"/>
+</layer-list>
 ```
 
-**File: `android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml`**
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/ic_launcher_background"/>
-    <foreground android:drawable="@drawable/ic_launcher_foreground"/>
-</adaptive-icon>
-```
+### Step 4: Fix Splash Theme Gray Box Issue
 
-### Step 2: Apply Splash Theme to Activity
+**File**: `android/app/src/main/res/values/styles.xml`
 
-**File: `android/app/src/main/AndroidManifest.xml`**
-
-Change the activity theme from `AppTheme.NoActionBar` to `AppTheme.Splash`:
+Add icon background color to prevent the gray box:
 
 ```xml
-<activity
-    android:name=".MainActivity"
-    android:exported="true"
-    android:launchMode="singleTask"
-    android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
-    android:screenOrientation="portrait"
-    android:theme="@style/AppTheme.Splash">
+<style name="AppTheme.Splash" parent="Theme.SplashScreen">
+    <item name="windowSplashScreenBackground">@color/splash_background</item>
+    <item name="windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
+    <item name="windowSplashScreenIconBackgroundColor">@color/splash_background</item>
+    <item name="windowSplashScreenAnimationDuration">1000</item>
+    <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+</style>
 ```
-
-The `postSplashScreenTheme` in `styles.xml` is already configured to transition to `AppTheme.NoActionBar` after the splash.
 
 ---
 
@@ -81,24 +81,27 @@ The `postSplashScreenTheme` in `styles.xml` is already configured to transition 
 
 | File | Change |
 |------|--------|
-| `android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml` | Fix foreground to `@drawable/ic_launcher_foreground` |
-| `android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml` | Fix foreground to `@drawable/ic_launcher_foreground` |
-| `android/app/src/main/AndroidManifest.xml` | Change activity theme to `@style/AppTheme.Splash` |
+| `android/app/src/main/res/values/colors.xml` | Change `ic_launcher_background` from #464660 to #FFFFFF |
+| `android/app/src/main/res/drawable/ic_launcher_foreground.png` | Replace with your K swoosh logo (exact file) |
+| `android/app/src/main/res/drawable/splash_logo.png` | Replace with your full IMPACT TMS logo (exact file) |
+| `android/app/src/main/res/drawable/splash.xml` | Adjust dimensions to 280dp x 120dp for text logo |
+| `android/app/src/main/res/values/styles.xml` | Add `windowSplashScreenIconBackgroundColor` |
 
 ---
 
 ## Expected Result
 
-After these changes:
-1. **App Icon**: Shows your Impact ATMS logo on the dark slate (#464660) background
-2. **Splash Screen**: Displays `splash_logo.png` centered on the #464660 background for 1 second before transitioning to the app
+| Element | Appearance |
+|---------|------------|
+| **App Icon** | K swoosh (your exact logo) on **white background** |
+| **Splash Screen** | Full "IMPACT TMS" logo (your exact logo) centered on **dark slate (#464660) background**, no gray box |
 
 ---
 
-## Testing Steps
+## Build Steps
 
 1. Pull the changes to your local project
 2. Run `npx cap sync android`
-3. Build and install the APK
-4. Verify the app icon in the launcher shows Impact ATMS logo
-5. Launch the app and confirm the splash screen appears with your logo
+3. Rebuild the APK in Android Studio
+4. Install and verify both icon and splash screen
+
