@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Impact TMS Splash Animation - Slide up with fade in -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:interpolator="@android:anim/decelerate_interpolator">
+    
+    <!-- Slide up animation - rises from below -->
+    <translate
+        android:fromYDelta="30%p"
+        android:toYDelta="0"
+        android:duration="500" />
+    
+    <!-- Fade in animation -->
+    <alpha
+        android:fromAlpha="0.0"
+        android:toAlpha="1.0"
+        android:duration="400" />
+</set>

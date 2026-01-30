@@ -17,13 +17,11 @@ public class MainActivity extends BridgeActivity {
         // Install splash screen with animation before calling super
         SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
         
-        // Set a custom exit animation
+        // Set a custom exit animation - slide down + fade out (complements slide up entrance)
         splashScreen.setOnExitAnimationListener(splashScreenView -> {
-            // Create fade out animation
             splashScreenView.getIconView().animate()
                 .alpha(0f)
-                .scaleX(1.1f)
-                .scaleY(1.1f)
+                .translationY(50f)
                 .setDuration(300)
                 .withEndAction(splashScreenView::remove)
                 .start();
