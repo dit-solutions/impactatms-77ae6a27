@@ -12,13 +12,25 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { LogOut, User, Users, Shield } from 'lucide-react';
+import { LogOut, LogIn, Users, Shield } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getRole } from '@/types/auth';
 
 export function UserMenu() {
-  const { user, logout } = useAuth();
+  const { user, logout, isAuthenticated } = useAuth();
   const { canManageUsers } = usePermissions();
+
+  // Show login button when not authenticated
+  if (!isAuthenticated) {
+    return (
+      <Button variant="ghost" size="sm" asChild>
+        <Link to="/login">
+          <LogIn className="h-4 w-4 mr-2" />
+          Admin Login
+        </Link>
+      </Button>
+    );
+  }
 
   if (!user) return null;
 

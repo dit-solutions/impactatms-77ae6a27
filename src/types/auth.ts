@@ -122,8 +122,8 @@ export const ROLES: Role[] = [
   {
     id: 'operator',
     name: 'Operator',
-    description: 'Tag scanning only.',
-    permissions: ['scanning'],
+    description: 'Tag scanning and reader connection.',
+    permissions: ['scanning', 'settings:connect'],
     isSystem: false,
     order: 3
   }
@@ -131,7 +131,7 @@ export const ROLES: Role[] = [
 
 // Role-permission mapping for quick lookups
 export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
-  operator: ['scanning'],
+  operator: ['scanning', 'settings:connect'],
   supervisor: ['scanning', 'settings:connect', 'settings:power', 'settings:mode', 'settings:debug'],
   admin: ['scanning', 'settings:connect', 'settings:power', 'settings:mode', 'settings:debug', 'user:manage'],
   super_admin: ['scanning', 'settings:connect', 'settings:power', 'settings:mode', 'settings:debug', 'user:manage', 'role:manage']

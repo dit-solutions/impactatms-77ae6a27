@@ -41,11 +41,11 @@ const App = () => (
               } 
             />
             
-            {/* Protected routes */}
+            {/* Open routes (no auth required, but app must be initialized) */}
             <Route 
               path="/" 
               element={
-                <ProtectedRoute permissions={['scanning']}>
+                <ProtectedRoute>
                   <Index />
                 </ProtectedRoute>
               } 
@@ -53,20 +53,21 @@ const App = () => (
             <Route 
               path="/settings" 
               element={
-                <ProtectedRoute permissions={['settings:connect', 'settings:power', 'settings:mode', 'settings:debug']}>
+                <ProtectedRoute>
                   <Settings />
                 </ProtectedRoute>
               } 
             />
+            
+            {/* Protected routes (require login + permissions) */}
             <Route 
               path="/users" 
               element={
-                <ProtectedRoute permissions={['user:manage']}>
+                <ProtectedRoute requireAuth permissions={['user:manage']}>
                   <UserManagement />
                 </ProtectedRoute>
               } 
             />
-            
             {/* Public admin panel for remote device management */}
             <Route path="/admin" element={<AdminPanel />} />
             
