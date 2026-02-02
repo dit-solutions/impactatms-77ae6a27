@@ -13,11 +13,40 @@ const STORAGE_KEYS = {
   USERS: 'impact_atms_users',
   SESSION: 'impact_atms_session',
   LOCKOUT: 'impact_atms_lockout',
-  ATTEMPTS: 'impact_atms_login_attempts'
+  ATTEMPTS: 'impact_atms_login_attempts',
+  DEVICE_ID: 'impact_atms_device_id'
 };
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+const UNLOCK_CODE_VALIDITY_MS = 30 * 60 * 1000; // 30 minutes
+
+// Get or create device ID
+function getDeviceId(): string {
+  let deviceId = localStorage.getItem(STORAGE_KEYS.DEVICE_ID);
+  if (!deviceId) {
+    deviceId = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    localStorage.setItem(STORAGE_KEYS.DEVICE_ID, deviceId);
+  }
+  return deviceId;
+}
+
+// Generate a deterministic unlock code based on lockoutId + deviceId + timestamp window
+async function generateUnlockCode(lockoutId: string, deviceId: string, timestamp: number): Promise<string> {
+  // Create a 30-min time window
+  const timeWindow = Math.floor(timestamp / UNLOCK_CODE_VALIDITY_MS);
+  const input = `${lockoutId}:${deviceId}:${timeWindow}:impact_unlock_salt`;
+  
+  const encoder = new TextEncoder();
+  const data = encoder.encode(input);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  
+  // Take first 6 digits from hash
+  const code = hashArray.slice(0, 3).map(b => (b % 10).toString()).join('') +
+               hashArray.slice(3, 6).map(b => (b % 10).toString()).join('');
+  return code;
+}
 
 // Hash PIN using SHA-256
 async function hashPin(pin: string): Promise<string> {
@@ -98,6 +127,11 @@ function clearLockout(): void {
   localStorage.removeItem(STORAGE_KEYS.ATTEMPTS);
 }
 
+// Generate unique lockout ID
+function generateLockoutId(): string {
+  return `lockout_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+}
+
 // Record login attempt
 function recordLoginAttempt(userId: string, success: boolean): void {
   const attempts: LoginAttempt[] = JSON.parse(
@@ -119,7 +153,8 @@ function recordLoginAttempt(userId: string, success: boolean): void {
       saveLockoutState({
         isLocked: true,
         lockedUntil: Date.now() + LOCKOUT_DURATION_MS,
-        attemptCount: failedCount
+        attemptCount: failedCount,
+        lockoutId: generateLockoutId()
       });
     } else {
       saveLockoutState({
@@ -140,8 +175,8 @@ export const authService = {
     return users.some(u => u.role === 'super_admin' && u.isSystem);
   },
 
-  // Initialize system with Super Admin
-  async initializeSuperAdmin(name: string, pin: string): Promise<User> {
+// Initialize system with Super Admin
+  async initializeSuperAdmin(name: string, pin: string, email?: string): Promise<User> {
     if (this.isInitialized()) {
       throw new Error('System already initialized');
     }
@@ -154,7 +189,8 @@ export const authService = {
       pinHash,
       isSystem: true,
       isArchived: false,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      email
     };
 
     saveUsers([superAdmin]);
@@ -397,12 +433,64 @@ export const authService = {
     return this.getUsers(includeArchived).filter(u => u.role === roleId);
   },
 
-  // Verify PIN for current user (for sensitive actions)
+// Verify PIN for current user (for sensitive actions)
   async verifyPin(userId: string, pin: string): Promise<boolean> {
     const user = this.getUser(userId);
     if (!user) return false;
 
     const pinHash = await hashPin(pin);
     return pinHash === user.pinHash;
+  },
+
+  // Get Super Admin contact info for lockout notification
+  getSuperAdminContact(): { name: string; email?: string } | null {
+    const superAdmin = getStoredUsers().find(u => u.isSystem && u.role === 'super_admin');
+    if (!superAdmin) return null;
+    return { name: superAdmin.name, email: superAdmin.email };
+  },
+
+  // Get device ID for unlock codes
+  getDeviceId(): string {
+    return getDeviceId();
+  },
+
+  // Generate unlock code for Super Admin to provide
+  async generateUnlockCodeForAdmin(): Promise<{ code: string; deviceId: string; expiresIn: number } | null> {
+    const lockout = getLockoutState();
+    if (!lockout.isLocked || !lockout.lockoutId) return null;
+    
+    const deviceId = getDeviceId();
+    const code = await generateUnlockCode(lockout.lockoutId, deviceId, Date.now());
+    
+    return {
+      code,
+      deviceId,
+      expiresIn: 30 // minutes
+    };
+  },
+
+  // Validate unlock code entered on locked device
+  async validateUnlockCode(code: string): Promise<boolean> {
+    const lockout = getLockoutState();
+    if (!lockout.isLocked || !lockout.lockoutId) return false;
+    
+    const deviceId = getDeviceId();
+    const expectedCode = await generateUnlockCode(lockout.lockoutId, deviceId, Date.now());
+    
+    if (code === expectedCode) {
+      clearLockout();
+      return true;
+    }
+    return false;
+  },
+
+  // Get current lockout info for display
+  getLockoutInfo(): { lockoutId?: string; deviceId: string } | null {
+    const lockout = getLockoutState();
+    if (!lockout.isLocked) return null;
+    return {
+      lockoutId: lockout.lockoutId,
+      deviceId: getDeviceId()
+    };
   }
 };

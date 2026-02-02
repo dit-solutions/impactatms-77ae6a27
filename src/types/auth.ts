@@ -32,6 +32,7 @@ export interface User {
   createdAt: number;
   lastLogin?: number;
   createdBy?: string; // User ID who created this user
+  email?: string; // Contact email (required for Super Admin)
 }
 
 // For creating new users
@@ -74,6 +75,16 @@ export interface LockoutState {
   isLocked: boolean;
   lockedUntil?: number;
   attemptCount: number;
+  lockoutId?: string; // Unique ID for this lockout event (used for unlock codes)
+}
+
+// Unlock code info for Super Admin
+export interface UnlockCodeInfo {
+  lockoutId: string;
+  deviceId: string;
+  generatedAt: number;
+  expiresAt: number;
+  code: string;
 }
 
 // Role definitions with permissions
