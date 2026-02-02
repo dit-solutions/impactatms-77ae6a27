@@ -10,10 +10,12 @@ import { RfidPowerSlider } from '@/components/rfid/RfidPowerSlider';
 import { RfidDebugPanel } from '@/components/rfid/RfidDebugPanel';
 import { AppVersionBadge } from '@/components/app/AppVersionBadge';
 import { useRfidSettings } from '@/hooks/use-rfid-settings';
+import { usePermissions } from '@/hooks/use-permissions';
 import { rfidService } from '@/services/rfid';
 import { toast } from '@/hooks/use-toast';
 
 const Settings = () => {
+  const { hasPermission } = usePermissions();
   const { power, mode, isConnected, setPower, setMode, refreshStatus } = useRfidSettings();
   const [connecting, setConnecting] = React.useState(false);
 
@@ -60,15 +62,17 @@ const Settings = () => {
         </header>
 
         <Tabs defaultValue="general" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-4">
+          <TabsList className={`grid w-full mb-4 ${hasPermission('settings:debug') ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <TabsTrigger value="general">
               <SettingsIcon className="h-4 w-4 mr-2" />
               General
             </TabsTrigger>
-            <TabsTrigger value="debug">
-              <Bug className="h-4 w-4 mr-2" />
-              Debug
-            </TabsTrigger>
+            {hasPermission('settings:debug') && (
+              <TabsTrigger value="debug">
+                <Bug className="h-4 w-4 mr-2" />
+                Debug
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="general" className="space-y-4">
@@ -184,9 +188,11 @@ const Settings = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="debug">
-            <RfidDebugPanel />
-          </TabsContent>
+          {hasPermission('settings:debug') && (
+            <TabsContent value="debug">
+              <RfidDebugPanel />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </div>

@@ -3,10 +3,14 @@ import { Link } from 'react-router-dom';
 import { RfidReaderPanel } from '@/components/rfid';
 import { Button } from '@/components/ui/button';
 import { Settings } from 'lucide-react';
+import { UserMenu } from '@/components/auth';
+import { usePermissions } from '@/hooks/use-permissions';
 import type { RfidTagData } from '@/services/rfid';
 import logoLight from '@/assets/logo-light.png';
 
 const Index = () => {
+  const { canAccessSettings } = usePermissions();
+
   const handleTagDetected = (tag: RfidTagData) => {
     // This is where you integrate with your toll automation API
     console.log('Tag detected - send to API:', tag.epc);
@@ -30,11 +34,16 @@ const Index = () => {
                 </p>
               </div>
             </div>
-            <Button variant="ghost" size="icon" asChild>
-              <Link to="/settings">
-                <Settings className="h-5 w-5" />
-              </Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              {canAccessSettings && (
+                <Button variant="ghost" size="icon" asChild>
+                  <Link to="/settings">
+                    <Settings className="h-5 w-5" />
+                  </Link>
+                </Button>
+              )}
+              <UserMenu />
+            </div>
           </div>
         </header>
         
