@@ -18,9 +18,8 @@ export interface UpdateInfo {
   mandatory?: boolean;
 }
 
-// GitHub repo for checking releases
-const GITHUB_OWNER = 'dit-solutions';
-const GITHUB_REPO = 'impactatms-77ae6a27';
+// Public manifest URL (hosted on the published app domain)
+const VERSION_MANIFEST_URL = 'https://impactatms.lovable.app/version.json';
 
 /**
  * Get the current app version info
@@ -55,50 +54,35 @@ export function isNativeApp(): boolean {
 }
 
 /**
- * Check GitHub releases for updates
+ * Check for updates using the public version manifest
  * @param currentBuild Current build number
  * @returns Update info if available, null otherwise
  */
 export async function checkForUpdates(currentBuild: string): Promise<UpdateInfo | null> {
   try {
-    // Fetch latest release from GitHub
-    const response = await fetch(
-      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`,
-      {
-        headers: {
-          'Accept': 'application/vnd.github.v3+json'
-        }
-      }
-    );
+    // Fetch version manifest from the published app domain
+    const response = await fetch(VERSION_MANIFEST_URL, {
+      cache: 'no-store' // Always get fresh data
+    });
 
     if (!response.ok) {
       console.warn('Failed to check for updates:', response.status);
       return null;
     }
 
-    const release = await response.json();
+    const manifest = await response.json();
     
-    // Parse version from tag (e.g., "v1.0.123" -> 123)
-    const tagName = release.tag_name || '';
-    const latestBuildMatch = tagName.match(/\.(\d+)$/);
-    const latestBuild = latestBuildMatch ? parseInt(latestBuildMatch[1], 10) : 0;
+    const latestBuild = manifest.build || 0;
     const currentBuildNum = parseInt(currentBuild, 10) || 0;
 
-    if (latestBuild > currentBuildNum) {
-      // Find APK asset
-      const apkAsset = release.assets?.find((asset: any) => 
-        asset.name.endsWith('.apk')
-      );
-
-      if (apkAsset) {
-        return {
-          latestVersion: release.tag_name,
-          latestBuild,
-          downloadUrl: apkAsset.browser_download_url,
-          releaseNotes: release.body,
-          mandatory: release.body?.toLowerCase().includes('[mandatory]')
-        };
-      }
+    if (latestBuild > currentBuildNum && manifest.downloadUrl) {
+      return {
+        latestVersion: manifest.version || `1.0.${latestBuild}`,
+        latestBuild,
+        downloadUrl: manifest.downloadUrl,
+        releaseNotes: manifest.releaseNotes,
+        mandatory: manifest.mandatory || false
+      };
     }
 
     return null;
