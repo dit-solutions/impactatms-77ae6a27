@@ -75,7 +75,7 @@ export default function Login() {
       const newPin = pin + digit;
       setPin(newPin);
       if (newPin.length === 6) {
-        setTimeout(() => handlePinComplete(newPin), 100);
+        handlePinComplete(newPin);
       }
     }
   };

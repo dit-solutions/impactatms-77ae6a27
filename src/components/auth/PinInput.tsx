@@ -88,7 +88,7 @@ export function PinInput({
   };
 
   return (
-    <div className="flex gap-2 justify-center" onPaste={handlePaste}>
+    <div className="flex gap-2 justify-center px-2 w-full max-w-[280px] mx-auto" onPaste={handlePaste}>
       {Array.from({ length }).map((_, index) => (
         <input
           key={index}
@@ -100,10 +100,11 @@ export function PinInput({
           onChange={e => handleChange(index, e.target.value)}
           onKeyDown={e => handleKeyDown(index, e)}
           disabled={disabled}
+          autoComplete="off"
+          autoCorrect="off"
           className={cn(
-            "w-12 h-14 text-center text-2xl font-bold rounded-lg border-2 bg-background",
-            "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
-            "transition-all duration-150",
+            "flex-1 min-w-0 aspect-square max-w-10 h-12 text-center text-xl font-bold rounded-lg border-2 bg-background",
+            "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1",
             error 
               ? "border-destructive text-destructive animate-shake" 
               : "border-input",
