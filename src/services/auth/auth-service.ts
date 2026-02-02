@@ -5,7 +5,8 @@ import type {
   UpdateUserData, 
   ValidationResult,
   LockoutState,
-  LoginAttempt
+  LoginAttempt,
+  DeviceConfig
 } from '@/types/auth';
 import { ROLE_HIERARCHY, canManageUser } from '@/types/auth';
 
@@ -14,21 +15,50 @@ const STORAGE_KEYS = {
   SESSION: 'impact_atms_session',
   LOCKOUT: 'impact_atms_lockout',
   ATTEMPTS: 'impact_atms_login_attempts',
-  DEVICE_ID: 'impact_atms_device_id'
+  DEVICE_ID: 'impact_atms_device_id',
+  DEVICE_CONFIG: 'impact_atms_device_config'
 };
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 const UNLOCK_CODE_VALIDITY_MS = 30 * 60 * 1000; // 30 minutes
 
-// Get or create device ID
+// Get or create device ID based on configured prefix and device number
 function getDeviceId(): string {
+  // First check if we have a cached formatted ID
   let deviceId = localStorage.getItem(STORAGE_KEYS.DEVICE_ID);
-  if (!deviceId) {
-    deviceId = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  if (deviceId) return deviceId;
+  
+  // Try to get from config
+  const config = getDeviceConfig();
+  if (config) {
+    deviceId = `${config.prefix}-${config.deviceNumber}`;
     localStorage.setItem(STORAGE_KEYS.DEVICE_ID, deviceId);
+    return deviceId;
   }
+  
+  // Fallback for legacy - should not happen after setup
+  deviceId = `DEVICE-${Date.now().toString(36).toUpperCase()}`;
+  localStorage.setItem(STORAGE_KEYS.DEVICE_ID, deviceId);
   return deviceId;
+}
+
+// Get device configuration
+function getDeviceConfig(): DeviceConfig | null {
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.DEVICE_CONFIG);
+    return data ? JSON.parse(data) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Save device configuration
+function saveDeviceConfig(config: DeviceConfig): void {
+  localStorage.setItem(STORAGE_KEYS.DEVICE_CONFIG, JSON.stringify(config));
+  // Also update the cached device ID
+  const deviceId = `${config.prefix}-${config.deviceNumber}`;
+  localStorage.setItem(STORAGE_KEYS.DEVICE_ID, deviceId);
 }
 
 // Generate a deterministic unlock code based on lockoutId + deviceId + timestamp window
@@ -175,10 +205,20 @@ export const authService = {
     return users.some(u => u.role === 'super_admin' && u.isSystem);
   },
 
-// Initialize system with Super Admin
-  async initializeSuperAdmin(name: string, pin: string, email?: string): Promise<User> {
+// Initialize system with Super Admin and device config
+  async initializeSuperAdmin(
+    name: string, 
+    pin: string, 
+    email?: string,
+    deviceConfig?: DeviceConfig
+  ): Promise<User> {
     if (this.isInitialized()) {
       throw new Error('System already initialized');
+    }
+
+    // Save device configuration if provided
+    if (deviceConfig) {
+      saveDeviceConfig(deviceConfig);
     }
 
     const pinHash = await hashPin(pin);
@@ -197,6 +237,16 @@ export const authService = {
     saveSession(superAdmin);
     
     return superAdmin;
+  },
+
+  // Get device configuration
+  getDeviceConfig(): DeviceConfig | null {
+    return getDeviceConfig();
+  },
+
+  // Update device configuration (Super Admin only)
+  updateDeviceConfig(config: DeviceConfig): void {
+    saveDeviceConfig(config);
   },
 
   // Get all users (optionally include archived)
