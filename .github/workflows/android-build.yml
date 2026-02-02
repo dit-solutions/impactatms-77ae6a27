@@ -105,6 +105,30 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Update version manifest
+        if: success()
+        run: |
+          RELEASE_DATE=$(date -u +%Y-%m-%d)
+          cat > public/version.json << EOF
+          {
+            "version": "1.0.${{ github.run_number }}",
+            "build": ${{ github.run_number }},
+            "downloadUrl": "https://github.com/${{ github.repository }}/releases/download/v1.0.${{ github.run_number }}/ImpactATMS-V1.0.${{ github.run_number }}.apk",
+            "releaseNotes": "Build ${{ github.run_number }}",
+            "releaseDate": "${RELEASE_DATE}"
+          }
+          EOF
+          echo "Updated version.json to build ${{ github.run_number }}"
+
+      - name: Commit version manifest
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/version.json
+          git commit -m "chore: update version manifest to v1.0.${{ github.run_number }}" || echo "No changes to commit"
+          git push || echo "Push failed - may need to pull first"
+
       - name: Upload build logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
