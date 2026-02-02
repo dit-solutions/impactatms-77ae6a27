@@ -1,348 +1,142 @@
 
+# Fix OTA Updates & Version Display
 
-# User Role & Permission (URP) System for Toll Plaza Kiosk
+## Issues Identified
 
-## Overview
-
-Build a local PIN-based authentication system with role-based access control for toll plaza kiosk devices. Users authenticate with a simple 4-6 digit PIN, and their role determines which features they can access.
-
----
-
-## Role Hierarchy
-
-| Role | Description | Access Level | Deletable |
-|------|-------------|--------------|-----------|
-| **Super Admin** | System owner, cannot be deleted | All features + User Management | No |
-| **Admin** | Full system control | All features + User Management | Yes (if no users) |
-| **Supervisor** | Device configuration and monitoring | Scanning + Settings + Debug | Yes (if no users) |
-| **Operator** | Tag scanning only | Scanning only | Yes (if no users) |
+| Issue | Root Cause | Solution |
+|-------|-----------|----------|
+| Version shows "1.0.0" | App update service has placeholder GitHub repo | Update to your actual repo URL |
+| "Package conflict" on install | Missing `DEBUG_KEYSTORE_BASE64` secret | You need to create and add this secret |
+| Updates not found | Workflow creates Artifacts, not Releases | Add Release creation step to workflow |
+| Check for updates fails | GitHub API returns 404 for non-existent repo | Fix repo URL |
 
 ---
 
-## Permission Matrix
+## Implementation Steps
 
-| Feature | Operator | Supervisor | Admin | Super Admin |
-|---------|:--------:|:----------:|:-----:|:-----------:|
-| RFID Scanning | Yes | Yes | Yes | Yes |
-| View Tag History | Yes | Yes | Yes | Yes |
-| Settings - Connect/Disconnect | No | Yes | Yes | Yes |
-| Settings - Power Level | No | Yes | Yes | Yes |
-| Settings - Read Mode | No | Yes | Yes | Yes |
-| Settings - Debug Panel | No | Yes | Yes | Yes |
-| User Management | No | No | Yes | Yes |
-| Role Management | No | No | No | Yes |
+### Step 1: Update GitHub Repository URL in App Update Service
+
+Change the placeholder values to your actual GitHub repository:
+
+**File**: `src/services/app-update/app-update-service.ts`
+
+```typescript
+// Before
+const GITHUB_OWNER = 'your-org';
+const GITHUB_REPO = 'impactatms';
+
+// After (you need to provide your actual values)
+const GITHUB_OWNER = 'your-github-username-or-org';
+const GITHUB_REPO = 'your-repo-name';
+```
+
+**Action needed from you**: Please provide your GitHub repository URL (e.g., `github.com/YourOrg/YourRepo`)
 
 ---
 
-## Role & User Protection Rules
+### Step 2: Fix APK Signing (CRITICAL - Stops "Package Conflict")
 
-### Super Admin Protection
-- One default Super Admin is created on first app launch
-- Super Admin role cannot be deleted from the system
-- Super Admin user cannot be deleted or demoted
-- Super Admin can create additional Admins who can manage users
+The GitHub workflow tries to use a secret called `DEBUG_KEYSTORE_BASE64`, but this secret does not exist in your repository. Without it, a new random keystore is generated for each build.
 
-### Role Deletion Rules
-- Roles with active users cannot be deleted
-- Before deleting a role, users must be:
-  - Moved to another role, OR
-  - Archived (soft deleted), OR
-  - Permanently removed
-- System shows clear error message with user count when deletion is blocked
+**Action needed from you**:
+
+1. On your computer, run these commands to generate a keystore:
+```bash
+# Generate the keystore
+keytool -genkeypair -v -keystore debug.keystore \
+  -storepass android -alias androiddebugkey -keypass android \
+  -keyalg RSA -keysize 2048 -validity 10000 \
+  -dname "CN=Impact ATMS Debug,O=D IT Solutions,C=IN"
+
+# Convert to Base64 (Mac/Linux)
+base64 -i debug.keystore | tr -d '\n'
+
+# Convert to Base64 (Windows PowerShell)
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("debug.keystore"))
+```
+
+2. Copy the Base64 output
+3. Go to your GitHub repo Settings, then Secrets and variables, then Actions
+4. Add a new secret named `DEBUG_KEYSTORE_BASE64` with the Base64 value
+
+---
+
+### Step 3: Add GitHub Release Creation to Workflow
+
+Currently, the workflow only uploads to Artifacts (which expire after 30 days and are not accessible via API). The app checks GitHub Releases instead.
+
+**File**: `.github/workflows/android-build.yml`
+
+Add a new step after the APK upload to create a Release:
+
+```yaml
+- name: Create GitHub Release
+  uses: softprops/action-gh-release@v1
+  with:
+    tag_name: v1.0.${{ github.run_number }}
+    name: ImpactATMS v1.0.${{ github.run_number }}
+    body: |
+      ## What's New
+      - Build ${{ github.run_number }}
+      - Built from commit: ${{ github.sha }}
+    files: android/app/build/outputs/apk/debug/ImpactATMS-V1.0.${{ github.run_number }}.apk
+    draft: false
+    prerelease: false
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+---
+
+### Step 4: Improve Version Display
+
+The version badge already shows "v{version} (Build {build})" which should work correctly once the above fixes are applied. But to make debugging easier, I'll add the build number more prominently.
+
+---
+
+## Web-Based Admin Panel for Remote Unlock
+
+Since you cannot access the app once it's deployed at client sites, I'll add a web page at `impactatms.lovable.app/admin` that:
+
+- Works from any browser (your phone, laptop, etc.)
+- Allows you to enter a Device ID and generate unlock codes
+- No app installation needed on your end
+
+**New file**: `src/pages/AdminPanel.tsx`
+
+This page will be public (accessible without login) but will require the Super Admin PIN to generate codes.
+
+---
+
+## Files to Change
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/services/app-update/app-update-service.ts` | Modify | Update GitHub repo URL |
+| `.github/workflows/android-build.yml` | Modify | Add Release creation step |
+| `src/pages/AdminPanel.tsx` | Create | Web-based remote admin panel |
+| `src/App.tsx` | Modify | Add route for /admin page |
+
+---
+
+## What You Need to Provide
+
+Before I can implement these changes:
+
+1. **Your GitHub repository URL** (e.g., `github.com/YourCompany/impactatms`)
+
+2. **Confirm you will add the keystore secret** (`DEBUG_KEYSTORE_BASE64`) using the commands above
+
+---
+
+## After Implementation: How Updates Will Work
 
 ```text
-Role Deletion Flow:
-
-User clicks "Delete Role"
-        |
-        v
-+-------------------+
-| Has active users? |
-+-------------------+
-    |           |
-   Yes          No
-    |           |
-    v           v
-+-------------+  +-----------+
-| Show error: |  | Confirm & |
-| "X users    |  | Delete    |
-| must be     |  +-----------+
-| reassigned" |
-+-------------+
-    |
-    v
-+------------------+
-| Options:         |
-| - Move to role   |
-| - Archive users  |
-| - Delete users   |
-+------------------+
+1. You make changes in Lovable
+2. Changes push to GitHub automatically
+3. GitHub Actions builds APK with consistent signing key
+4. Workflow creates a GitHub Release with the APK attached
+5. Client device opens app → Goes to Settings → Taps "Check for updates"
+6. App finds new version → Shows "Update to v1.0.X" button
+7. User taps → APK downloads and installs over existing app (no uninstall needed)
 ```
-
----
-
-## User Experience Flow
-
-```text
-First Launch (Setup)
-        |
-        v
-+------------------------+
-|  Initial Setup Screen  |
-|  Create Super Admin    |
-|  [Enter Name]          |
-|  [Set 6-digit PIN]     |
-|  [Confirm PIN]         |
-+------------------------+
-        |
-        v
-Subsequent Launches
-        |
-        v
-+------------------+
-|   Login Screen   |
-|   [Select User]  |
-|   [Enter PIN]    |
-+------------------+
-        |
-        v (authenticated)
-+------------------+
-|   Main Scanner   |
-|   (UI adapts to  |
-|    user's role)  |
-+------------------+
-```
-
----
-
-## Architecture
-
-### New Files to Create
-
-| File | Purpose |
-|------|---------|
-| `src/types/auth.ts` | User, Role, Permission type definitions |
-| `src/services/auth/auth-service.ts` | Local PIN storage and verification |
-| `src/services/auth/index.ts` | Auth service exports |
-| `src/contexts/AuthContext.tsx` | Global auth state provider |
-| `src/hooks/use-auth.ts` | Hook for auth actions and state |
-| `src/hooks/use-permissions.ts` | Hook for checking feature permissions |
-| `src/pages/Login.tsx` | PIN entry login screen |
-| `src/pages/InitialSetup.tsx` | First-time Super Admin setup |
-| `src/pages/UserManagement.tsx` | Admin page for managing users |
-| `src/components/auth/ProtectedRoute.tsx` | Route wrapper for permission checks |
-| `src/components/auth/UserMenu.tsx` | Current user display + logout button |
-| `src/components/auth/PinInput.tsx` | Reusable 6-digit PIN input component |
-
-### Files to Modify
-
-| File | Changes |
-|------|---------|
-| `src/App.tsx` | Wrap with AuthProvider, add protected routes |
-| `src/pages/Index.tsx` | Add UserMenu, conditional Settings button |
-| `src/pages/Settings.tsx` | Permission checks for each section |
-
----
-
-## Technical Details
-
-### Type Definitions
-
-```typescript
-// src/types/auth.ts
-
-export type UserRole = 'super_admin' | 'admin' | 'supervisor' | 'operator';
-
-export type Permission = 
-  | 'scanning'
-  | 'settings:connect'
-  | 'settings:power'
-  | 'settings:mode'
-  | 'settings:debug'
-  | 'user:manage'
-  | 'role:manage';
-
-export interface Role {
-  id: UserRole;
-  name: string;
-  permissions: Permission[];
-  isSystem: boolean;      // true = cannot be deleted (Super Admin)
-  createdAt: number;
-}
-
-export interface User {
-  id: string;
-  name: string;
-  role: UserRole;
-  pinHash: string;        // SHA-256 hashed
-  isSystem: boolean;      // true = Super Admin user, cannot be deleted
-  isArchived: boolean;    // Soft delete flag
-  createdAt: number;
-  lastLogin?: number;
-}
-```
-
-### Role-Permission Mapping
-
-```typescript
-export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
-  operator: ['scanning'],
-  supervisor: ['scanning', 'settings:connect', 'settings:power', 'settings:mode', 'settings:debug'],
-  admin: ['scanning', 'settings:connect', 'settings:power', 'settings:mode', 'settings:debug', 'user:manage'],
-  super_admin: ['scanning', 'settings:connect', 'settings:power', 'settings:mode', 'settings:debug', 'user:manage', 'role:manage']
-};
-```
-
-### Role Deletion Logic
-
-```typescript
-// In auth-service.ts
-
-function canDeleteRole(roleId: UserRole): { allowed: boolean; reason?: string; userCount?: number } {
-  // Super Admin role cannot be deleted
-  if (roleId === 'super_admin') {
-    return { allowed: false, reason: 'System role cannot be deleted' };
-  }
-  
-  // Count active (non-archived) users with this role
-  const activeUsers = users.filter(u => u.role === roleId && !u.isArchived);
-  
-  if (activeUsers.length > 0) {
-    return { 
-      allowed: false, 
-      reason: `${activeUsers.length} active user(s) must be reassigned first`,
-      userCount: activeUsers.length
-    };
-  }
-  
-  return { allowed: true };
-}
-```
-
-### User Deletion Protection
-
-```typescript
-function canDeleteUser(userId: string): { allowed: boolean; reason?: string } {
-  const user = users.find(u => u.id === userId);
-  
-  if (!user) {
-    return { allowed: false, reason: 'User not found' };
-  }
-  
-  // Super Admin user cannot be deleted
-  if (user.isSystem) {
-    return { allowed: false, reason: 'System user cannot be deleted' };
-  }
-  
-  return { allowed: true };
-}
-```
-
----
-
-## User Management Features
-
-### For Super Admin
-- Create/edit/delete Admins, Supervisors, Operators
-- Archive users (soft delete)
-- View all users including archived
-- Cannot delete or demote themselves
-
-### For Admin
-- Create/edit/delete Supervisors, Operators
-- Cannot create other Admins
-- Cannot modify Super Admin
-- Cannot delete or demote themselves
-
-### User Actions
-
-| Action | Operator | Supervisor | Admin | Super Admin |
-|--------|:--------:|:----------:|:-----:|:-----------:|
-| View users | No | No | Yes | Yes |
-| Create Operator | No | No | Yes | Yes |
-| Create Supervisor | No | No | Yes | Yes |
-| Create Admin | No | No | No | Yes |
-| Edit own PIN | Yes | Yes | Yes | Yes |
-| Edit other users | No | No | Yes | Yes |
-| Archive users | No | No | Yes | Yes |
-| Delete users | No | No | Yes | Yes |
-| Delete Super Admin | No | No | No | No |
-
----
-
-## Security Features
-
-| Feature | Implementation |
-|---------|----------------|
-| PIN Storage | SHA-256 hashed via Web Crypto API |
-| Session | Memory + sessionStorage for tab persistence |
-| Lockout | 5 failed attempts = 5-minute lockout |
-| Auto-logout | Configurable inactivity timeout |
-| Audit Log | Local log of login attempts and user changes |
-
----
-
-## Initial Setup Flow
-
-1. App launches for first time
-2. Detects no users in storage
-3. Shows "Initial Setup" screen
-4. User creates Super Admin account:
-   - Enter display name
-   - Set 6-digit PIN
-   - Confirm PIN
-5. Super Admin logged in automatically
-6. Can now add other users from User Management
-
----
-
-## Files Summary
-
-### New Files (12)
-
-1. `src/types/auth.ts` - Type definitions
-2. `src/services/auth/auth-service.ts` - Core authentication logic
-3. `src/services/auth/index.ts` - Service exports
-4. `src/contexts/AuthContext.tsx` - React context for auth state
-5. `src/hooks/use-auth.ts` - Auth hook
-6. `src/hooks/use-permissions.ts` - Permission checking hook
-7. `src/pages/Login.tsx` - Login page with PIN entry
-8. `src/pages/InitialSetup.tsx` - First-time Super Admin setup
-9. `src/pages/UserManagement.tsx` - Admin user management page
-10. `src/components/auth/ProtectedRoute.tsx` - Route protection component
-11. `src/components/auth/UserMenu.tsx` - User dropdown with logout
-12. `src/components/auth/PinInput.tsx` - PIN input component
-
-### Modified Files (3)
-
-1. `src/App.tsx` - Add AuthProvider and protected routes
-2. `src/pages/Index.tsx` - Add UserMenu, conditional Settings button
-3. `src/pages/Settings.tsx` - Permission checks for each section
-
----
-
-## Future API Integration
-
-The auth service is designed with a clean interface that can switch from localStorage to your Impact ATMS API:
-
-```typescript
-interface AuthService {
-  // Authentication
-  login(userId: string, pin: string): Promise<User | null>;
-  logout(): void;
-  
-  // User Management
-  getUsers(): User[];
-  createUser(data: CreateUserData): Promise<User>;
-  updateUser(id: string, data: UpdateUserData): Promise<User>;
-  deleteUser(id: string): Promise<boolean>;
-  archiveUser(id: string): Promise<boolean>;
-  
-  // Role Validation
-  canDeleteRole(roleId: UserRole): ValidationResult;
-  canDeleteUser(userId: string): ValidationResult;
-}
-```
-
-When ready to integrate with your backend, create an `ApiAuthService` class that implements this interface and calls your Impact ATMS API endpoints.
-
