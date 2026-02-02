@@ -49,16 +49,19 @@ jobs:
 
       - name: Create consistent debug keystore
         run: |
+          # IMPORTANT: To avoid Android "package conflicts" on update, every APK must be
+          # signed with the SAME key. Do not generate a new keystore in CI.
+          if [ -z "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" ]; then
+            echo "ERROR: Missing GitHub secret DEBUG_KEYSTORE_BASE64."
+            echo "Create one debug.keystore once, base64-encode it, and save it as a repo secret."
+            echo "Then rerun the workflow."
+            exit 1
+          fi
+
           mkdir -p ~/.android
-          # Generate a DETERMINISTIC keystore using a fixed seed
-          # This ensures the same keystore is created on every build
-          # allowing APK updates without uninstalling
-          echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 -d > ~/.android/debug.keystore 2>/dev/null || \
-          keytool -genkeypair -v -keystore ~/.android/debug.keystore \
-            -storepass android -alias androiddebugkey -keypass android \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=Impact ATMS Debug,O=Impact ATMS,C=IN"
+          echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 --decode > ~/.android/debug.keystore
           cp ~/.android/debug.keystore android/debug.keystore
+
           # Output keystore fingerprint for verification
           keytool -list -v -keystore ~/.android/debug.keystore -storepass android 2>/dev/null | grep "SHA256:" || true
 
