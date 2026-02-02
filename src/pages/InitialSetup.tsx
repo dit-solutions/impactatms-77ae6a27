@@ -13,8 +13,9 @@ export default function InitialSetup() {
   const navigate = useNavigate();
   const { initializeSuperAdmin, isInitialized } = useAuth();
   
-  const [step, setStep] = useState<'name' | 'pin' | 'confirm'>('name');
+  const [step, setStep] = useState<'name' | 'email' | 'pin' | 'confirm'>('name');
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [error, setError] = useState('');
@@ -31,6 +32,18 @@ export default function InitialSetup() {
     e.preventDefault();
     if (name.trim().length < 2) {
       setError('Name must be at least 2 characters');
+      return;
+    }
+    setError('');
+    setStep('email');
+  };
+
+  const handleEmailSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      setError('Please enter a valid email address');
       return;
     }
     setError('');
@@ -60,7 +73,7 @@ export default function InitialSetup() {
     setError('');
 
     try {
-      await initializeSuperAdmin(name.trim(), pin);
+      await initializeSuperAdmin(name.trim(), pin, email.trim());
       navigate('/', { replace: true });
     } catch (err) {
       setError('Failed to create Super Admin. Please try again.');
@@ -118,13 +131,13 @@ export default function InitialSetup() {
 
         {/* Progress Indicator */}
         <div className="flex justify-center gap-2 mb-6">
-          {['name', 'pin', 'confirm'].map((s, i) => (
+          {['name', 'email', 'pin', 'confirm'].map((s, i) => (
             <div
               key={s}
-              className={`h-2 w-16 rounded-full transition-colors ${
+              className={`h-2 w-12 rounded-full transition-colors ${
                 step === s 
                   ? 'bg-primary' 
-                  : ['name', 'pin', 'confirm'].indexOf(step) > i 
+                  : ['name', 'email', 'pin', 'confirm'].indexOf(step) > i 
                     ? 'bg-primary/60' 
                     : 'bg-muted'
               }`}
@@ -139,11 +152,13 @@ export default function InitialSetup() {
             </div>
             <CardTitle>
               {step === 'name' && 'Enter Your Name'}
+              {step === 'email' && 'Enter Contact Email'}
               {step === 'pin' && 'Create PIN'}
               {step === 'confirm' && 'Confirm PIN'}
             </CardTitle>
             <CardDescription>
               {step === 'name' && 'This will be your Super Admin display name'}
+              {step === 'email' && 'Used for lockout notifications and recovery'}
               {step === 'pin' && 'Create a 6-digit PIN for secure access'}
               {step === 'confirm' && 'Re-enter your PIN to confirm'}
             </CardDescription>
@@ -170,6 +185,29 @@ export default function InitialSetup() {
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={!name.trim()}>
+                  Continue
+                </Button>
+              </form>
+            )}
+
+            {step === 'email' && (
+              <form onSubmit={handleEmailSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Contact Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="admin@company.com"
+                    autoFocus
+                    autoComplete="off"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    This email will be shown to users when the device is locked
+                  </p>
+                </div>
+                <Button type="submit" className="w-full" disabled={!email.trim()}>
                   Continue
                 </Button>
               </form>

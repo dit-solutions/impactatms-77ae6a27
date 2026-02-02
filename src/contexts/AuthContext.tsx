@@ -6,7 +6,7 @@ interface AuthContextType extends AuthState {
   // Actions
   login: (userId: string, pin: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
-  initializeSuperAdmin: (name: string, pin: string) => Promise<User>;
+  initializeSuperAdmin: (name: string, pin: string, email?: string) => Promise<User>;
   
   // User management
   users: User[];
@@ -79,8 +79,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
-  const initializeSuperAdmin = useCallback(async (name: string, pin: string) => {
-    const user = await authService.initializeSuperAdmin(name, pin);
+  const initializeSuperAdmin = useCallback(async (name: string, pin: string, email?: string) => {
+    const user = await authService.initializeSuperAdmin(name, pin, email);
     setState({
       user,
       isAuthenticated: true,

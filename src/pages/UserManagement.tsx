@@ -12,8 +12,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { PinInput, NumericKeypad } from '@/components/auth/PinInput';
-import { ArrowLeft, Users, Plus, Pencil, Trash2, Shield, Archive, Key } from 'lucide-react';
+import { PinInput, NumericKeypad, UnlockCodeGenerator } from '@/components/auth';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ArrowLeft, Users, Plus, Pencil, Trash2, Shield, Archive, Key, Unlock } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import type { User, UserRole, CreateUserData } from '@/types/auth';
 import { getRole, ROLES, canManageUser, getCreatableRoles } from '@/types/auth';
@@ -88,8 +89,23 @@ export default function UserManagement() {
           </div>
         </header>
 
-        {/* User List by Role */}
-        <div className="space-y-6">
+        {/* Tabs for Users and Unlock */}
+        <Tabs defaultValue="users" className="space-y-4">
+          {isSuperAdmin && (
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="users" className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Users
+              </TabsTrigger>
+              <TabsTrigger value="unlock" className="flex items-center gap-2">
+                <Unlock className="h-4 w-4" />
+                Device Unlock
+              </TabsTrigger>
+            </TabsList>
+          )}
+
+          <TabsContent value="users" className="space-y-6">
+            {/* User List by Role */}
           {usersByRole.map(({ role, users: roleUsers }) => (
             <Card key={role.id}>
               <CardHeader className="pb-3">
@@ -204,7 +220,15 @@ export default function UserManagement() {
               </CardContent>
             </Card>
           ))}
-        </div>
+          </TabsContent>
+
+          {/* Unlock Code Generator Tab - Super Admin only */}
+          {isSuperAdmin && (
+            <TabsContent value="unlock">
+              <UnlockCodeGenerator />
+            </TabsContent>
+          )}
+        </Tabs>
 
         {/* Edit User Dialog */}
         {editingUser && (

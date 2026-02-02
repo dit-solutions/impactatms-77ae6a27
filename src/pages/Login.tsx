@@ -4,11 +4,12 @@ import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PinInput, NumericKeypad } from '@/components/auth/PinInput';
+import { PinInput, NumericKeypad, UnlockCodeInput } from '@/components/auth';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Lock, AlertCircle, User, Shield } from 'lucide-react';
 import { getRole } from '@/types/auth';
+import { authService } from '@/services/auth';
 import logoLight from '@/assets/logo-light.png';
 
 export default function Login() {
@@ -97,6 +98,11 @@ export default function Login() {
     ? Math.ceil((lockoutState.lockedUntil - Date.now()) / 60000)
     : 0;
 
+  const handleUnlocked = () => {
+    // Refresh lockout state after unlock
+    window.location.reload();
+  };
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -125,100 +131,97 @@ export default function Login() {
           </CardHeader>
           
           <CardContent className="space-y-6">
-            {/* Lockout Warning */}
-            {isLocked && (
-              <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-destructive">Account Locked</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Too many failed attempts. Try again in {lockoutRemaining} minute(s).
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Error Message */}
-            {error && !isLocked && (
-              <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-lg text-center">
-                {error}
-              </div>
-            )}
-
-            {/* User Selection */}
-            <div className="space-y-2">
-              <Select 
-                value={selectedUserId} 
-                onValueChange={id => {
-                  setSelectedUserId(id);
-                  setPin('');
-                  setError('');
-                }}
-                disabled={isLocked || isSubmitting}
-              >
-                <SelectTrigger className="h-auto py-3">
-                  <SelectValue placeholder="Select user...">
-                    {selectedUser && (
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback className="bg-primary/20 text-primary text-xs">
-                            {getInitials(selectedUser.name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="text-left">
-                          <p className="font-medium">{selectedUser.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {getRole(selectedUser.role)?.name}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {users.map(user => {
-                    const role = getRole(user.role);
-                    return (
-                      <SelectItem key={user.id} value={user.id}>
-                        <div className="flex items-center gap-3 py-1">
-                          <Avatar className="h-8 w-8">
-                            <AvatarFallback className="bg-primary/20 text-primary text-xs">
-                              {getInitials(user.name)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium flex items-center gap-1">
-                              {user.name}
-                              {user.isSystem && <Shield className="h-3 w-3 text-primary" />}
-                            </p>
-                            <p className="text-xs text-muted-foreground">{role?.name}</p>
-                          </div>
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* PIN Input */}
-            {selectedUserId && (
+            {/* Lockout with Unlock Code Input */}
+            {isLocked ? (
+              <UnlockCodeInput 
+                onUnlocked={handleUnlocked} 
+                lockoutRemaining={lockoutRemaining} 
+              />
+            ) : (
               <>
-                <PinInput
-                  value={pin}
-                  onChange={setPin}
-                  onComplete={handlePinComplete}
-                  disabled={isLocked || isSubmitting}
-                  error={!!error}
-                  autoFocus
-                />
+                {/* Error Message */}
+                {error && (
+                  <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-lg text-center">
+                    {error}
+                  </div>
+                )}
 
-                <NumericKeypad
-                  onDigit={handleKeypadDigit}
-                  onBackspace={handleKeypadBackspace}
-                  onClear={handleKeypadClear}
-                  disabled={isLocked || isSubmitting}
-                />
+                {/* User Selection */}
+                <div className="space-y-2">
+                  <Select 
+                    value={selectedUserId} 
+                    onValueChange={id => {
+                      setSelectedUserId(id);
+                      setPin('');
+                      setError('');
+                    }}
+                    disabled={isSubmitting}
+                  >
+                    <SelectTrigger className="h-auto py-3">
+                      <SelectValue placeholder="Select user...">
+                        {selectedUser && (
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-8 w-8">
+                              <AvatarFallback className="bg-primary/20 text-primary text-xs">
+                                {getInitials(selectedUser.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="text-left">
+                              <p className="font-medium">{selectedUser.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {getRole(selectedUser.role)?.name}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {users.map(user => {
+                        const role = getRole(user.role);
+                        return (
+                          <SelectItem key={user.id} value={user.id}>
+                            <div className="flex items-center gap-3 py-1">
+                              <Avatar className="h-8 w-8">
+                                <AvatarFallback className="bg-primary/20 text-primary text-xs">
+                                  {getInitials(user.name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <p className="font-medium flex items-center gap-1">
+                                  {user.name}
+                                  {user.isSystem && <Shield className="h-3 w-3 text-primary" />}
+                                </p>
+                                <p className="text-xs text-muted-foreground">{role?.name}</p>
+                              </div>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* PIN Input */}
+                {selectedUserId && (
+                  <>
+                    <PinInput
+                      value={pin}
+                      onChange={setPin}
+                      onComplete={handlePinComplete}
+                      disabled={isSubmitting}
+                      error={!!error}
+                      autoFocus
+                    />
+
+                    <NumericKeypad
+                      onDigit={handleKeypadDigit}
+                      onBackspace={handleKeypadBackspace}
+                      onClear={handleKeypadClear}
+                      disabled={isSubmitting}
+                    />
+                  </>
+                )}
               </>
             )}
           </CardContent>
