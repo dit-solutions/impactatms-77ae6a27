@@ -1,83 +1,98 @@
 
-# Fix APK Signing - Package Conflict Issue
+# Fix Version Display & In-App Updates
 
-## Root Cause
+## Problems Identified
 
-The GitHub Actions workflow correctly decodes your `DEBUG_KEYSTORE_BASE64` secret into a keystore file, but **the Gradle build configuration never uses it**. 
+### Problem 1: Version Shows "web" in Native App
+The app can't read the native version because `@capacitor/app` plugin is missing from dependencies.
 
-Currently:
-- Workflow saves keystore to `~/.android/debug.keystore` and `android/debug.keystore`
-- Gradle has no `signingConfigs` block
-- Gradle uses its own auto-generated debug key (different on every CI runner)
-- Each APK is signed with a different key = package conflicts on update
+### Problem 2: In-App Updates Don't Work
+The `version.json` manifest is never updated by the CI workflow, so:
+- `build` stays at `0`
+- `downloadUrl` is empty
+- The app can never detect a new version
 
 ## Solution
 
-Add explicit signing configuration to `android/app/build.gradle` that tells Gradle exactly which keystore to use for debug builds.
+### 1. Add Missing Capacitor Plugin
 
-## Changes Required
+Install `@capacitor/app` package which provides `App.getInfo()` to read the native app version.
 
-### 1. Update `android/app/build.gradle`
-
-Add a `signingConfigs` block and reference it in the `debug` build type:
-
-```text
-android {
-    namespace "app.lovable.f68cb15949ce434d93731abbed2b0512"
-    compileSdk 36
-    
-    // ADD THIS: Signing configuration using the consistent keystore
-    signingConfigs {
-        debug {
-            storeFile file("${project.rootDir}/debug.keystore")
-            storePassword "android"
-            keyAlias "androiddebugkey"
-            keyPassword "android"
-        }
-    }
-    
-    defaultConfig {
-        applicationId "app.lovable.f68cb15949ce434d93731abbed2b0512"
-        minSdk 24
-        targetSdk 34
-        versionCode getBuildNumber()
-        versionName "1.0.${getBuildNumber()}"
-    }
-    
-    buildTypes {
-        release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-        }
-        debug {
-            debuggable true
-            signingConfig signingConfigs.debug  // ADD THIS LINE
-        }
-    }
-    
-    // ... rest of file unchanged
-}
+```bash
+npm install @capacitor/app
 ```
 
-### 2. What the Workflow Already Does (No Changes Needed)
+### 2. Update GitHub Workflow to Auto-Update Manifest
 
-The workflow step "Create consistent debug keystore" already:
-- Decodes `DEBUG_KEYSTORE_BASE64` to `android/debug.keystore`
-- Prints the SHA256 fingerprint for verification
+Add a step after creating the release that:
+1. Updates `public/version.json` with the new build number
+2. Adds the GitHub Release APK download URL  
+3. Commits and pushes the change back to the repository
 
-With the Gradle change, it will now actually use that keystore.
+The download URL format for GitHub releases is:
+```
+https://github.com/{owner}/{repo}/releases/download/v1.0.{build}/ImpactATMS-V1.0.{build}.apk
+```
 
-## After This Fix
+### 3. Workflow Changes
 
-1. **One-time action**: Uninstall the currently installed app from the device (last time you'll need to do this)
-2. Push the change to GitHub
-3. Install the next APK build
-4. All future APK updates will install without conflicts
+Add this step after "Create GitHub Release":
 
-## Technical Summary
+```yaml
+- name: Update version manifest
+  run: |
+    cat > public/version.json << EOF
+    {
+      "version": "1.0.${{ github.run_number }}",
+      "build": ${{ github.run_number }},
+      "downloadUrl": "https://github.com/${{ github.repository }}/releases/download/v1.0.${{ github.run_number }}/ImpactATMS-V1.0.${{ github.run_number }}.apk",
+      "releaseNotes": "Build ${{ github.run_number }}",
+      "releaseDate": "$(date -u +%Y-%m-%d)"
+    }
+    EOF
 
-| Before | After |
-|--------|-------|
-| Gradle uses random CI-generated debug key | Gradle uses your consistent `debug.keystore` |
-| Each build has different signature | All builds have same signature |
-| Updates fail with package conflict | Updates install smoothly |
+- name: Commit version manifest
+  run: |
+    git config user.name "github-actions[bot]"
+    git config user.email "github-actions[bot]@users.noreply.github.com"
+    git add public/version.json
+    git commit -m "Update version manifest to v1.0.${{ github.run_number }}" || true
+    git push
+```
+
+## How In-App Updates Will Work After Fix
+
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│                        UPDATE FLOW                                  │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1. User clicks "Check for updates"                                │
+│                     │                                               │
+│                     ▼                                               │
+│  2. App fetches https://impactatms.lovable.app/version.json        │
+│     (Now contains: build: 42, downloadUrl: "...github.../v1.0.42") │
+│                     │                                               │
+│                     ▼                                               │
+│  3. Compares: manifest.build (42) > currentBuild (41)?             │
+│                     │                                               │
+│              Yes ───┴─── No                                         │
+│               │           └──> "No updates available"               │
+│               ▼                                                     │
+│  4. Shows "Update to v1.0.42" button                               │
+│                     │                                               │
+│                     ▼                                               │
+│  5. User taps button -> Opens APK download URL                     │
+│                     │                                               │
+│                     ▼                                               │
+│  6. Android downloads APK and prompts to install                   │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+## Important Notes
+
+- The `version.json` update must happen AFTER the release so the download URL is valid
+- The workflow needs `contents: write` permission (already present) to push commits
+- After publishing changes to the live site, the next build will update the manifest
+- The app must be reinstalled once to clear old signature conflicts (from previous fix)
