@@ -1,4 +1,4 @@
-# Welcome to your Lovable project
+# Welcome to Impact ATMS Android App for Handheld UHF Reader Device
 
 ## Project info
 
