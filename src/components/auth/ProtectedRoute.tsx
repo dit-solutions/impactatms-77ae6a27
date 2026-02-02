@@ -8,6 +8,7 @@ interface ProtectedRouteProps {
   children: React.ReactNode;
   permissions?: Permission[];
   requireAll?: boolean; // If true, user must have ALL permissions. Default: any one.
+  requireAuth?: boolean; // If true, user must be logged in. Default: false for open access
   fallbackPath?: string;
 }
 
@@ -15,6 +16,7 @@ export function ProtectedRoute({
   children,
   permissions = [],
   requireAll = false,
+  requireAuth = false,
   fallbackPath = '/'
 }: ProtectedRouteProps) {
   const { isAuthenticated, isInitialized } = useAuth();
@@ -26,13 +28,13 @@ export function ProtectedRoute({
     return <Navigate to="/setup" state={{ from: location }} replace />;
   }
 
-  // Not authenticated - redirect to login
-  if (!isAuthenticated) {
+  // Check if authentication is required
+  if (requireAuth && !isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Check permissions if specified
-  if (permissions.length > 0) {
+  // Check permissions if specified (only applies when user is logged in)
+  if (permissions.length > 0 && isAuthenticated) {
     const hasAccess = requireAll 
       ? hasAllPermissions(...permissions)
       : hasAnyPermission(...permissions);
@@ -40,6 +42,11 @@ export function ProtectedRoute({
     if (!hasAccess) {
       return <Navigate to={fallbackPath} replace />;
     }
+  }
+
+  // If permissions specified but not logged in, require login
+  if (permissions.length > 0 && !isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   return <>{children}</>;
