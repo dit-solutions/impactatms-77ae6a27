@@ -1,59 +1,83 @@
 
+# Fix APK Signing - Package Conflict Issue
 
-# Fix GitHub Release 403 Error
+## Root Cause
 
-## Problem
+The GitHub Actions workflow correctly decodes your `DEBUG_KEYSTORE_BASE64` secret into a keystore file, but **the Gradle build configuration never uses it**. 
 
-The build is failing with a **403 Forbidden** error when trying to create a GitHub Release:
-```
-⚠️ GitHub release failed with status: 403
-```
-
-This happens because the workflow's `GITHUB_TOKEN` lacks permission to create releases. By default, GitHub Actions only gives read permissions.
+Currently:
+- Workflow saves keystore to `~/.android/debug.keystore` and `android/debug.keystore`
+- Gradle has no `signingConfigs` block
+- Gradle uses its own auto-generated debug key (different on every CI runner)
+- Each APK is signed with a different key = package conflicts on update
 
 ## Solution
 
-Add a `permissions` block to the workflow that grants write access to the repository contents (which includes releases).
+Add explicit signing configuration to `android/app/build.gradle` that tells Gradle exactly which keystore to use for debug builds.
 
 ## Changes Required
 
-**File: `.github/workflows/android-build.yml`**
+### 1. Update `android/app/build.gradle`
 
-Add after line 9 (`runs-on: ubuntu-latest`):
+Add a `signingConfigs` block and reference it in the `debug` build type:
 
-```yaml
-permissions:
-  contents: write
-```
-
-This single line tells GitHub to allow the workflow to:
-- Create tags
-- Create releases
-- Upload release assets (the APK file)
-
-## Complete Fix
-
-The job section will look like:
-
-```yaml
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+```text
+android {
+    namespace "app.lovable.f68cb15949ce434d93731abbed2b0512"
+    compileSdk 36
     
-    steps:
-      ...
+    // ADD THIS: Signing configuration using the consistent keystore
+    signingConfigs {
+        debug {
+            storeFile file("${project.rootDir}/debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+    
+    defaultConfig {
+        applicationId "app.lovable.f68cb15949ce434d93731abbed2b0512"
+        minSdk 24
+        targetSdk 34
+        versionCode getBuildNumber()
+        versionName "1.0.${getBuildNumber()}"
+    }
+    
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            debuggable true
+            signingConfig signingConfigs.debug  // ADD THIS LINE
+        }
+    }
+    
+    // ... rest of file unchanged
+}
 ```
+
+### 2. What the Workflow Already Does (No Changes Needed)
+
+The workflow step "Create consistent debug keystore" already:
+- Decodes `DEBUG_KEYSTORE_BASE64` to `android/debug.keystore`
+- Prints the SHA256 fingerprint for verification
+
+With the Gradle change, it will now actually use that keystore.
 
 ## After This Fix
 
-1. Push the change to GitHub
-2. The next build will have permission to create releases
-3. APK will be attached to the release
-4. The update system will work (once we also add the manifest update step)
+1. **One-time action**: Uninstall the currently installed app from the device (last time you'll need to do this)
+2. Push the change to GitHub
+3. Install the next APK build
+4. All future APK updates will install without conflicts
 
-## Additional Note
+## Technical Summary
 
-We should also add the step to automatically update `version.json` after release creation. This would be added in the same edit to complete the auto-update flow.
-
+| Before | After |
+|--------|-------|
+| Gradle uses random CI-generated debug key | Gradle uses your consistent `debug.keystore` |
+| Each build has different signature | All builds have same signature |
+| Updates fail with package conflict | Updates install smoothly |
