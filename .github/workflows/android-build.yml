@@ -79,6 +79,27 @@ jobs:
           path: android/app/build/outputs/apk/debug/ImpactATMS-V1.0.${{ github.run_number }}.apk
           retention-days: 30
 
+      - name: Create GitHub Release
+        if: success()
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: ImpactATMS v1.0.${{ github.run_number }}
+          body: |
+            ## ImpactATMS v1.0.${{ github.run_number }}
+            
+            **Build:** ${{ github.run_number }}
+            **Commit:** ${{ github.sha }}
+            **Date:** ${{ github.event.head_commit.timestamp }}
+            
+            ### Installation
+            Download the APK below and install on your device.
+          files: android/app/build/outputs/apk/debug/ImpactATMS-V1.0.${{ github.run_number }}.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload build logs on failure
         if: failure()
         uses: actions/upload-artifact@v4

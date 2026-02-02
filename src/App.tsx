@@ -10,6 +10,7 @@ import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import InitialSetup from "./pages/InitialSetup";
 import UserManagement from "./pages/UserManagement";
+import AdminPanel from "./pages/AdminPanel";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -65,6 +66,9 @@ const App = () => (
                 </ProtectedRoute>
               } 
             />
+            
+            {/* Public admin panel for remote device management */}
+            <Route path="/admin" element={<AdminPanel />} />
             
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
