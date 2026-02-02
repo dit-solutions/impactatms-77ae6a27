@@ -18,9 +18,9 @@ export interface UpdateInfo {
   mandatory?: boolean;
 }
 
-// GitHub repo for checking releases (update this to your actual repo)
-const GITHUB_OWNER = 'your-org';
-const GITHUB_REPO = 'impactatms';
+// GitHub repo for checking releases
+const GITHUB_OWNER = 'dit-solutions';
+const GITHUB_REPO = 'impactatms-77ae6a27';
 
 /**
  * Get the current app version info

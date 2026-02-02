@@ -78,13 +78,39 @@ async function generateUnlockCode(lockoutId: string, deviceId: string, timestamp
   return code;
 }
 
-// Hash PIN using SHA-256
-async function hashPin(pin: string): Promise<string> {
+// Hash PIN using SHA-256 - exported for web admin panel
+export async function hashPin(pin: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(pin + 'impact_atms_salt');
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Verify PIN against a stored hash
+export async function verifyStoredPin(pin: string, storedHash: string): Promise<boolean> {
+  const pinHash = await hashPin(pin);
+  return pinHash === storedHash;
+}
+
+// Generate deterministic unlock code for a device (for web admin panel)
+export function generateDeterministicCode(deviceId: string, lockoutId: number): string {
+  // Create a 30-min time window based on current time
+  const timeWindow = Math.floor(Date.now() / UNLOCK_CODE_VALIDITY_MS);
+  const input = `lockout_${lockoutId}:${deviceId}:${timeWindow}:impact_unlock_salt`;
+  
+  // Simple hash for synchronous generation (for demo - same logic as async version)
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    const char = input.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  
+  // Generate 6-digit code from hash
+  const positive = Math.abs(hash);
+  const code = String(positive % 1000000).padStart(6, '0');
+  return code;
 }
 
 // Generate unique ID
