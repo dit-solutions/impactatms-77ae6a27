@@ -6,14 +6,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PinInput, NumericKeypad } from '@/components/auth/PinInput';
-import { Shield, CheckCircle2 } from 'lucide-react';
+import { Shield, CheckCircle2, Smartphone } from 'lucide-react';
 import logoLight from '@/assets/logo-light.png';
+import type { DeviceConfig } from '@/types/auth';
 
 export default function InitialSetup() {
   const navigate = useNavigate();
   const { initializeSuperAdmin, isInitialized } = useAuth();
   
-  const [step, setStep] = useState<'name' | 'email' | 'pin' | 'confirm'>('name');
+  const [step, setStep] = useState<'device' | 'name' | 'email' | 'pin' | 'confirm'>('device');
+  const [devicePrefix, setDevicePrefix] = useState('IMPACT');
+  const [deviceNumber, setDeviceNumber] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
@@ -27,6 +30,20 @@ export default function InitialSetup() {
       navigate('/login', { replace: true });
     }
   }, [isInitialized, navigate]);
+
+  const handleDeviceSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!devicePrefix.trim()) {
+      setError('Device prefix is required');
+      return;
+    }
+    if (!deviceNumber.trim()) {
+      setError('Device number is required');
+      return;
+    }
+    setError('');
+    setStep('name');
+  };
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,7 +90,11 @@ export default function InitialSetup() {
     setError('');
 
     try {
-      await initializeSuperAdmin(name.trim(), pin, email.trim());
+      const deviceConfig: DeviceConfig = {
+        prefix: devicePrefix.trim().toUpperCase(),
+        deviceNumber: deviceNumber.trim().toUpperCase()
+      };
+      await initializeSuperAdmin(name.trim(), pin, email.trim(), deviceConfig);
       navigate('/', { replace: true });
     } catch (err) {
       setError('Failed to create Super Admin. Please try again.');
@@ -131,13 +152,13 @@ export default function InitialSetup() {
 
         {/* Progress Indicator */}
         <div className="flex justify-center gap-2 mb-6">
-          {['name', 'email', 'pin', 'confirm'].map((s, i) => (
+          {['device', 'name', 'email', 'pin', 'confirm'].map((s, i) => (
             <div
               key={s}
-              className={`h-2 w-12 rounded-full transition-colors ${
+              className={`h-2 w-10 rounded-full transition-colors ${
                 step === s 
                   ? 'bg-primary' 
-                  : ['name', 'email', 'pin', 'confirm'].indexOf(step) > i 
+                  : ['device', 'name', 'email', 'pin', 'confirm'].indexOf(step) > i 
                     ? 'bg-primary/60' 
                     : 'bg-muted'
               }`}
@@ -148,15 +169,21 @@ export default function InitialSetup() {
         <Card>
           <CardHeader className="text-center pb-2">
             <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-2">
-              <Shield className="h-6 w-6 text-primary" />
+              {step === 'device' ? (
+                <Smartphone className="h-6 w-6 text-primary" />
+              ) : (
+                <Shield className="h-6 w-6 text-primary" />
+              )}
             </div>
             <CardTitle>
+              {step === 'device' && 'Configure Device'}
               {step === 'name' && 'Enter Your Name'}
               {step === 'email' && 'Enter Contact Email'}
               {step === 'pin' && 'Create PIN'}
               {step === 'confirm' && 'Confirm PIN'}
             </CardTitle>
             <CardDescription>
+              {step === 'device' && 'Set a unique identifier for this device'}
               {step === 'name' && 'This will be your Super Admin display name'}
               {step === 'email' && 'Used for lockout notifications and recovery'}
               {step === 'pin' && 'Create a 6-digit PIN for secure access'}
@@ -169,6 +196,49 @@ export default function InitialSetup() {
               <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-lg text-center">
                 {error}
               </div>
+            )}
+
+            {step === 'device' && (
+              <form onSubmit={handleDeviceSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="devicePrefix">Device Prefix</Label>
+                  <Input
+                    id="devicePrefix"
+                    value={devicePrefix}
+                    onChange={e => setDevicePrefix(e.target.value.toUpperCase())}
+                    placeholder="e.g., IMPACT, ATMS"
+                    autoFocus
+                    autoComplete="off"
+                    maxLength={10}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Organization or device type identifier
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="deviceNumber">Device Number</Label>
+                  <Input
+                    id="deviceNumber"
+                    value={deviceNumber}
+                    onChange={e => setDeviceNumber(e.target.value.toUpperCase())}
+                    placeholder="e.g., 001, A1, MAIN"
+                    autoComplete="off"
+                    maxLength={10}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Unique number for this device
+                  </p>
+                </div>
+                <div className="p-3 bg-muted/50 rounded-lg text-center">
+                  <p className="text-xs text-muted-foreground mb-1">Device ID Preview:</p>
+                  <code className="text-lg font-mono font-semibold text-primary">
+                    {devicePrefix || 'PREFIX'}-{deviceNumber || '001'}
+                  </code>
+                </div>
+                <Button type="submit" className="w-full" disabled={!devicePrefix.trim() || !deviceNumber.trim()}>
+                  Continue
+                </Button>
+              </form>
             )}
 
             {step === 'name' && (

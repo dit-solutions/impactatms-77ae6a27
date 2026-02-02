@@ -87,6 +87,12 @@ export interface UnlockCodeInfo {
   code: string;
 }
 
+// Device configuration set during initial setup
+export interface DeviceConfig {
+  prefix: string; // e.g., "IMPACT", "ATMS"
+  deviceNumber: string; // e.g., "001", "A1", etc.
+}
+
 // Role definitions with permissions
 export const ROLES: Role[] = [
   {

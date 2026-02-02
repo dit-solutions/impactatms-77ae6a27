@@ -113,12 +113,12 @@ export function UnlockCodeGenerator({ className }: UnlockCodeGeneratorProps) {
             <Label htmlFor="deviceId">Device ID *</Label>
             <Input
               id="deviceId"
-              placeholder="device_1234567890_abc123"
+              placeholder="e.g., IMPACT-001"
               value={deviceId}
-              onChange={(e) => setDeviceId(e.target.value)}
+              onChange={(e) => setDeviceId(e.target.value.toUpperCase())}
             />
             <p className="text-xs text-muted-foreground">
-              The user will provide this from their locked device screen
+              The user will provide this from their locked device screen (format: PREFIX-NUMBER)
             </p>
           </div>
 
