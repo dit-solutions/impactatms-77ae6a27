@@ -1,4 +1,4 @@
-# Welcome to Impact ATMS Android App for Handheld UHF Reader Device
+# Impact ATMS Android App for Handheld UHF Reader Device
 
 ## Project info
 
