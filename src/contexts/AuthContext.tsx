@@ -1,3 +1,4 @@
+// Auth Context - Provides authentication state and actions
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { User, AuthState, CreateUserData, UpdateUserData, LockoutState } from '@/types/auth';
 import { authService } from '@/services/auth';
