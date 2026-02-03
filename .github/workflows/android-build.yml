@@ -109,15 +109,16 @@ jobs:
         if: success()
         run: |
           RELEASE_DATE=$(date -u +%Y-%m-%d)
-          cat > public/version.json << EOF
-          {
-            "version": "1.0.${{ github.run_number }}",
-            "build": ${{ github.run_number }},
-            "downloadUrl": "https://github.com/${{ github.repository }}/releases/download/v1.0.${{ github.run_number }}/ImpactATMS-V1.0.${{ github.run_number }}.apk",
-            "releaseNotes": "Build ${{ github.run_number }}",
-            "releaseDate": "${RELEASE_DATE}"
-          }
-          EOF
+          cat > public/version.json << 'EOF'
+{
+  "version": "1.0.${{ github.run_number }}",
+  "build": ${{ github.run_number }},
+  "downloadUrl": "https://github.com/${{ github.repository }}/releases/download/v1.0.${{ github.run_number }}/ImpactATMS-V1.0.${{ github.run_number }}.apk",
+  "releaseNotes": "Build ${{ github.run_number }}",
+  "releaseDate": "RELEASE_DATE_PLACEHOLDER"
+}
+EOF
+          sed -i "s/RELEASE_DATE_PLACEHOLDER/${RELEASE_DATE}/" public/version.json
           echo "Updated version.json to build ${{ github.run_number }}"
 
       - name: Commit version manifest
@@ -125,9 +126,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main || git pull --rebase origin master || true
           git add public/version.json
           git commit -m "chore: update version manifest to v1.0.${{ github.run_number }}" || echo "No changes to commit"
-          git push || echo "Push failed - may need to pull first"
+          git push
 
       - name: Upload build logs on failure
         if: failure()
