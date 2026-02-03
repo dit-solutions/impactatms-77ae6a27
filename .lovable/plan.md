@@ -1,98 +1,78 @@
 
-# Fix Version Display & In-App Updates
+# Fix GitHub Actions Build Workflow
 
 ## Problems Identified
 
-### Problem 1: Version Shows "web" in Native App
-The app can't read the native version because `@capacitor/app` plugin is missing from dependencies.
+### 1. Invalid JSON Formatting
+The heredoc in the workflow creates JSON with leading whitespace/indentation:
+```yaml
+cat > public/version.json << EOF
+          {
+            "version": "1.0.XX",
+```
+This produces a file with 10 spaces before each line, making it invalid JSON.
 
-### Problem 2: In-App Updates Don't Work
-The `version.json` manifest is never updated by the CI workflow, so:
-- `build` stays at `0`
-- `downloadUrl` is empty
-- The app can never detect a new version
+### 2. Git Push May Fail
+The workflow pushes without handling potential conflicts. If another commit happened (which is likely since Lovable commits frequently), the push fails.
+
+---
 
 ## Solution
 
-### 1. Add Missing Capacitor Plugin
-
-Install `@capacitor/app` package which provides `App.getInfo()` to read the native app version.
-
-```bash
-npm install @capacitor/app
-```
-
-### 2. Update GitHub Workflow to Auto-Update Manifest
-
-Add a step after creating the release that:
-1. Updates `public/version.json` with the new build number
-2. Adds the GitHub Release APK download URL  
-3. Commits and pushes the change back to the repository
-
-The download URL format for GitHub releases is:
-```
-https://github.com/{owner}/{repo}/releases/download/v1.0.{build}/ImpactATMS-V1.0.{build}.apk
-```
-
-### 3. Workflow Changes
-
-Add this step after "Create GitHub Release":
+### Fix 1: Remove Heredoc Indentation
+Use a properly formatted heredoc without leading spaces, or use `echo` with proper escaping:
 
 ```yaml
 - name: Update version manifest
+  if: success()
   run: |
-    cat > public/version.json << EOF
-    {
-      "version": "1.0.${{ github.run_number }}",
-      "build": ${{ github.run_number }},
-      "downloadUrl": "https://github.com/${{ github.repository }}/releases/download/v1.0.${{ github.run_number }}/ImpactATMS-V1.0.${{ github.run_number }}.apk",
-      "releaseNotes": "Build ${{ github.run_number }}",
-      "releaseDate": "$(date -u +%Y-%m-%d)"
-    }
-    EOF
+    RELEASE_DATE=$(date -u +%Y-%m-%d)
+    cat > public/version.json << 'EOF'
+{
+  "version": "1.0.${{ github.run_number }}",
+  "build": ${{ github.run_number }},
+  "downloadUrl": "https://github.com/${{ github.repository }}/releases/download/v1.0.${{ github.run_number }}/ImpactATMS-V1.0.${{ github.run_number }}.apk",
+  "releaseNotes": "Build ${{ github.run_number }}",
+  "releaseDate": "RELEASE_DATE_PLACEHOLDER"
+}
+EOF
+    sed -i "s/RELEASE_DATE_PLACEHOLDER/${RELEASE_DATE}/" public/version.json
+```
 
+### Fix 2: Handle Git Push Conflicts
+Add `git pull --rebase` before pushing to handle any commits that happened during the build:
+
+```yaml
 - name: Commit version manifest
+  if: success()
   run: |
     git config user.name "github-actions[bot]"
     git config user.email "github-actions[bot]@users.noreply.github.com"
+    git pull --rebase origin main || git pull --rebase origin master || true
     git add public/version.json
-    git commit -m "Update version manifest to v1.0.${{ github.run_number }}" || true
+    git commit -m "chore: update version manifest to v1.0.${{ github.run_number }}" || echo "No changes to commit"
     git push
 ```
 
-## How In-App Updates Will Work After Fix
+---
 
-```text
-┌─────────────────────────────────────────────────────────────────────┐
-│                        UPDATE FLOW                                  │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  1. User clicks "Check for updates"                                │
-│                     │                                               │
-│                     ▼                                               │
-│  2. App fetches https://impactatms.lovable.app/version.json        │
-│     (Now contains: build: 42, downloadUrl: "...github.../v1.0.42") │
-│                     │                                               │
-│                     ▼                                               │
-│  3. Compares: manifest.build (42) > currentBuild (41)?             │
-│                     │                                               │
-│              Yes ───┴─── No                                         │
-│               │           └──> "No updates available"               │
-│               ▼                                                     │
-│  4. Shows "Update to v1.0.42" button                               │
-│                     │                                               │
-│                     ▼                                               │
-│  5. User taps button -> Opens APK download URL                     │
-│                     │                                               │
-│                     ▼                                               │
-│  6. Android downloads APK and prompts to install                   │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
+## Files to Modify
 
-## Important Notes
+| File | Change |
+|------|--------|
+| `.github/workflows/android-build.yml` | Fix JSON heredoc formatting and add git pull before push |
 
-- The `version.json` update must happen AFTER the release so the download URL is valid
-- The workflow needs `contents: write` permission (already present) to push commits
-- After publishing changes to the live site, the next build will update the manifest
-- The app must be reinstalled once to clear old signature conflicts (from previous fix)
+---
+
+## Technical Details
+
+The heredoc syntax `<< EOF` preserves all content including leading whitespace. To fix this:
+1. Start JSON content at column 0 (no indentation)
+2. Or use `<<-EOF` (with dash) which strips leading tabs (but not spaces)
+3. Or use `printf` / `echo` with proper formatting
+
+The git conflict issue occurs because:
+1. Lovable pushes code changes
+2. GitHub Actions runs, takes ~5 minutes to build
+3. During that time, more commits may be pushed
+4. When Actions tries to push version.json update, it's behind and fails
