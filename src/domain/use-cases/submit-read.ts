@@ -29,8 +29,8 @@ export function useReadCapture() {
       localReadId,
       epc: tag.epc,
       rssi: tag.rssi || 0,
-      tid: (tag as any).tid,
-      userData: (tag as any).userData,
+      tid: tag.tid || '',
+      userData: tag.userData || '',
       timestamp: new Date(tag.timestamp || now).toISOString(),
       syncStatus: 'pending',
       laneId,
@@ -39,7 +39,7 @@ export function useReadCapture() {
 
     // Queue locally first
     await db.add(read);
-    logger.info(`Read queued: ${tag.epc} (${localReadId}) lane=${laneId}`);
+    logger.info(`Read queued: ${tag.epc} (${localReadId}) lane=${laneId} tid=${(tag.tid || '').length}chars userData=${(tag.userData || '').length}chars`);
 
     // Always attempt immediate upload
     try {
