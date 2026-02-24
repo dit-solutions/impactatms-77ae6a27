@@ -56,9 +56,14 @@ const ProvisioningScreen = () => {
         }
       );
     } catch (err) {
-      setError('Camera access denied. Please allow camera permissions.');
+      const errMsg = String(err);
+      if (errMsg.includes('NotAllowedError') || errMsg.includes('Permission')) {
+        setError('Camera permission denied. Please grant camera access in your device Settings → Apps → impactatms → Permissions, then tap "Open Camera" again.');
+      } else {
+        setError('Could not access camera: ' + errMsg);
+      }
       setScanning(false);
-      logger.error('Camera access failed: ' + String(err));
+      logger.error('Camera access failed: ' + errMsg);
     }
   };
 
