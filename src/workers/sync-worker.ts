@@ -13,7 +13,7 @@ type PendingCountCallback = (count: number) => void;
 
 class SyncWorker {
   private intervalId: number | null = null;
-  private intervalMs = 60000;
+  private intervalMs = 5000;
   private onSynced: SyncCallback | null = null;
   private onPendingCount: PendingCountCallback | null = null;
 
@@ -32,7 +32,7 @@ class SyncWorker {
 
   start() {
     if (this.intervalId) return;
-    this.updatePendingCount();
+    this.syncPending();
     this.intervalId = window.setInterval(() => {
       this.syncPending();
     }, this.intervalMs);
@@ -47,7 +47,6 @@ class SyncWorker {
   }
 
   async syncPending() {
-    if (!networkStatus.isOnline) return;
 
     try {
       const pending = await db.getPending(50);
