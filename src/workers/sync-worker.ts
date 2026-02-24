@@ -1,6 +1,6 @@
 /**
  * Sync Worker
- * Periodically batches and uploads pending reads.
+ * Periodically uploads pending reads individually via /api/v1/handheld/rfid.
  */
 
 import { db } from '@/data/local/database';
@@ -57,39 +57,41 @@ class SyncWorker {
         return;
       }
 
-      logger.info(`Syncing ${pending.length} pending reads`);
+      logger.info(`Syncing ${pending.length} pending reads individually`);
+      let syncedCount = 0;
 
-      const response = await apiClient.submitReadsBatch({
-        reads: pending.map(r => ({
-          local_read_id: r.localReadId,
-          epc: r.epc,
-          tid: r.tid,
-          user_data: r.userData,
-          rssi: r.rssi,
-          antenna: r.antenna,
-          timestamp: r.timestamp,
-          gps: r.gps,
-        })),
-      });
+      for (const r of pending) {
+        try {
+          const response = await apiClient.submitRfidRead({
+            tag_id: r.epc,
+            tid: r.tid || '',
+            user_data: r.userData || '',
+            lane_id: r.laneId || '',
+          });
 
-      for (const result of response.results) {
-        await db.updateByLocalReadId(result.local_read_id, {
-          syncStatus: 'synced',
-          action: result.action,
-          reason: result.reason,
-          displayMessage: result.display_message,
-          syncedAt: Date.now(),
-        });
+          await db.updateByLocalReadId(r.localReadId, {
+            syncStatus: 'synced',
+            action: response.action as 'ALLOW' | 'REJECT' | undefined,
+            reason: response.reason || response.message,
+            displayMessage: response.display_message,
+            syncedAt: Date.now(),
+          });
+          syncedCount++;
+        } catch (err) {
+          if (err instanceof ApiAuthError) {
+            logger.error('Sync auth failed — stopping batch');
+            break;
+          }
+          logger.warn(`Failed to sync read ${r.localReadId}: ${err}`);
+        }
       }
 
-      this.onSynced?.(new Date());
-      logger.info(`Synced ${response.results.length} reads`);
+      if (syncedCount > 0) {
+        this.onSynced?.(new Date());
+        logger.info(`Synced ${syncedCount} reads`);
+      }
     } catch (err) {
-      if (err instanceof ApiAuthError) {
-        logger.error('Sync auth failed');
-      } else {
-        logger.warn(`Sync failed: ${err}`);
-      }
+      logger.warn(`Sync cycle failed: ${err}`);
     }
 
     this.updatePendingCount();

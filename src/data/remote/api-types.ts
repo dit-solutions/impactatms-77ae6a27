@@ -100,6 +100,23 @@ export interface BatchReadResponse {
   results: ReadResult[];
 }
 
+// --- Individual RFID Submit ---
+
+export interface RfidSubmitRequest {
+  tag_id: string;
+  tid: string;
+  user_data: string;
+  lane_id: string;
+}
+
+export interface RfidSubmitResponse {
+  action?: ReadAction;
+  reason?: string;
+  display_message?: string;
+  message?: string;
+  [key: string]: unknown;
+}
+
 // --- Auth / Login ---
 
 export interface LoginRequest {
