@@ -21,6 +21,8 @@ export interface PendingRead {
   action?: 'ALLOW' | 'REJECT';
   reason?: string;
   displayMessage?: string;
+  /** Selected lane ID for this read */
+  laneId?: string;
   /** When it was created locally */
   createdAt: number;
   /** When it was last synced */

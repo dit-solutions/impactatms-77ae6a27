@@ -14,8 +14,10 @@ const ScanScreen = () => {
   const { captureRead, lastResult } = useReadCapture();
 
   const handleTagDetected = useCallback(async (tag: RfidTagData) => {
-    await captureRead(tag);
-  }, [captureRead]);
+    if (selectedLane) {
+      await captureRead(tag, selectedLane.id);
+    }
+  }, [captureRead, selectedLane]);
 
   const handleLaneChange = useCallback((laneId: string) => {
     const lane = lanes.find(l => l.id === laneId) || null;

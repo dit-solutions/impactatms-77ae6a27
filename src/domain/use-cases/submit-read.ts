@@ -1,6 +1,6 @@
 /**
  * Submit Read use-case.
- * Captures a tag read, queues it locally, attempts immediate upload.
+ * Captures a tag read, queues it locally, attempts immediate upload via /api/v1/handheld/rfid.
  */
 
 import { useState, useCallback } from 'react';
@@ -21,7 +21,7 @@ export interface ReadResultDisplay {
 export function useReadCapture() {
   const [lastResult, setLastResult] = useState<ReadResultDisplay | null>(null);
 
-  const captureRead = useCallback(async (tag: RfidTagData) => {
+  const captureRead = useCallback(async (tag: RfidTagData, laneId: string) => {
     const localReadId = uuidv4();
     const now = Date.now();
 
@@ -29,47 +29,51 @@ export function useReadCapture() {
       localReadId,
       epc: tag.epc,
       rssi: tag.rssi || 0,
+      tid: (tag as any).tid,
+      userData: (tag as any).userData,
       timestamp: new Date(tag.timestamp || now).toISOString(),
       syncStatus: 'pending',
+      laneId,
       createdAt: now,
     };
 
     // Queue locally first
     await db.add(read);
-    logger.info(`Read queued: ${tag.epc} (${localReadId})`);
+    logger.info(`Read queued: ${tag.epc} (${localReadId}) lane=${laneId}`);
 
     // Attempt immediate upload if online
     if (networkStatus.isOnline) {
       try {
-        const response = await apiClient.submitReadsBatch({
-          reads: [{
-            local_read_id: localReadId,
-            epc: read.epc,
-            tid: read.tid,
-            user_data: read.userData,
-            rssi: read.rssi,
-            timestamp: read.timestamp,
-            gps: read.gps,
-          }],
+        const response = await apiClient.submitRfidRead({
+          tag_id: read.epc,
+          tid: read.tid || '',
+          user_data: read.userData || '',
+          lane_id: laneId,
         });
 
-        const result = response.results?.[0];
-        if (result) {
+        const action = response.action || (response.message ? 'ALLOW' : undefined);
+        if (action) {
           await db.updateByLocalReadId(localReadId, {
             syncStatus: 'synced',
-            action: result.action,
-            reason: result.reason,
-            displayMessage: result.display_message,
+            action: action as 'ALLOW' | 'REJECT',
+            reason: response.reason || response.message,
+            displayMessage: response.display_message,
             syncedAt: Date.now(),
           });
 
           setLastResult({
-            action: result.action,
-            reason: result.reason,
-            displayMessage: result.display_message,
+            action: action as 'ALLOW' | 'REJECT',
+            reason: response.reason || response.message,
+            displayMessage: response.display_message,
           });
 
-          logger.info(`Read synced: ${result.action} — ${result.reason}`);
+          logger.info(`Read synced: ${action} — ${response.reason || response.message}`);
+        } else {
+          await db.updateByLocalReadId(localReadId, {
+            syncStatus: 'synced',
+            syncedAt: Date.now(),
+          });
+          logger.info(`Read submitted, no action in response`);
         }
       } catch (err) {
         if (err instanceof ApiAuthError) {

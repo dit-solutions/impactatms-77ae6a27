@@ -13,6 +13,8 @@ import type {
   DeviceConfigResponse,
   BatchReadRequest,
   BatchReadResponse,
+  RfidSubmitRequest,
+  RfidSubmitResponse,
   LoginRequest,
   LoginResponse,
   Lane,
@@ -140,6 +142,13 @@ class ApiClient {
   async submitReadsBatch(req: BatchReadRequest): Promise<BatchReadResponse> {
     return this.request<BatchReadResponse>(
       '/api/v1/handheld/fastag-read/batch',
+      { method: 'POST', body: JSON.stringify(req) }
+    );
+  }
+
+  async submitRfidRead(req: RfidSubmitRequest): Promise<RfidSubmitResponse> {
+    return this.request<RfidSubmitResponse>(
+      '/api/v1/handheld/rfid',
       { method: 'POST', body: JSON.stringify(req) }
     );
   }
