@@ -1,64 +1,93 @@
 
 
-# Fix: GitHub Actions Version Manifest Push Failure
+# Add User Login After Device Provisioning
 
-## Problem
+## Overview
 
-The CI build succeeds (APK is built and released) but the final step that commits `version.json` back to the repo fails because:
+Currently, after a successful QR provisioning, the app jumps straight to the Scan screen. You need a **login step** in between: once the device is provisioned, the user must sign in with their email/phone and password before accessing the app.
 
-1. `npx cap sync` earlier in the workflow modifies tracked files in `android/`, leaving unstaged changes that block `git pull --rebase`.
-2. Lovable's own commits land on `main` while the build runs, so the push is rejected with "remote contains work you do not have locally."
+## Flow Change
 
-## Solution
-
-Update the "Commit version manifest" step in `.github/workflows/android-build.yml` to:
-
-1. **Stash or reset** unrelated changes before pulling — use `git checkout -- .` or `git stash` to clear modifications from `cap sync`.
-2. **Only stage `version.json`** — ensure no other modified files sneak into the commit.
-3. **Force-pull with autostash** — use `git pull --rebase --autostash` so it handles any remaining dirty state.
-4. **Retry push with a short loop** — if the push still fails due to a race, pull and retry (up to 3 attempts).
-
-### Updated step (replaces the current "Commit version manifest" step):
-
-```yaml
-- name: Commit version manifest
-  if: success()
-  run: |
-    git config user.name "github-actions[bot]"
-    git config user.email "github-actions[bot]@users.noreply.github.com"
-
-    # Reset all unstaged changes from cap sync / build
-    git checkout -- .
-
-    # Stage only version.json
-    git add public/version.json
-    git diff --cached --quiet && echo "No changes to commit" && exit 0
-
-    git commit -m "chore: update version manifest to v1.0.${{ github.run_number }}"
-
-    # Retry push up to 3 times (handles race with Lovable commits)
-    for i in 1 2 3; do
-      git pull --rebase origin main && git push origin main && exit 0
-      echo "Push attempt $i failed, retrying..."
-      sleep 2
-    done
-    echo "WARNING: Could not push version.json after 3 attempts (non-fatal)"
+```text
+QR Scan --> Provision --> Login Screen --> App (Scan, etc.)
+           (saves device_token)    (email + password)
 ```
 
-### Why this works
+## API Details (from screenshots)
 
-| Problem | Fix |
-|---------|-----|
-| Unstaged changes from `cap sync` block rebase | `git checkout -- .` resets the working tree before pulling |
-| Remote is ahead (Lovable pushed) | `git pull --rebase` before push, with retry loop |
-| Push still rejected on race | 3 retry attempts with 2s delay; exits gracefully if all fail |
+- **Endpoint**: `POST /api/v1/handheld/auth/login`
+- **Headers**:
+  - `Content-Type: application/json`
+  - `Accept: application/json`
+  - `Device: HHM <device_token>` (uses the token saved during provisioning)
+- **Body**: `{ "login": "user@example.com", "password": "pass123" }`
+- **Response**: Expected to return user/session data (the app will store this to mark the user as logged in)
 
-### Files changed
+**Important**: The `Device` header format is `HHM <token>`, not `Authorization: Device <token>`. This needs to be updated across the API client.
+
+## Technical Changes
+
+### 1. `src/data/remote/api-types.ts` -- Add login types
+
+Add new interfaces:
+- `LoginRequest`: `{ login: string; password: string }`
+- `LoginResponse`: `{ message: string; user: { id: string; name: string; email: string } }` (will adjust based on actual response)
+
+### 2. `src/data/remote/api-client.ts` -- Fix auth header and add login endpoint
+
+- Change the auth header from `Authorization: Device <token>` to `Device: HHM <token>` to match the backend
+- Add a `login()` method that POSTs to `/api/v1/handheld/auth/login` with the device token header (no user auth needed yet, only device auth)
+
+### 3. `src/security/token-store.ts` -- Add user session storage
+
+- Add `setUserToken()`, `getUserToken()`, `hasUserToken()`, `clearUserToken()` methods
+- Store user session data so the app knows someone is logged in
+
+### 4. `src/contexts/DeviceContext.tsx` -- Add new "provisioned" state
+
+- Add `'provisioned'` to the `DeviceState` type (between `unprovisioned` and `active`)
+- `completeProvisioning()` now sets state to `provisioned` (not `active`)
+- Add new `completeLogin()` action that sets state to `active`
+- Add `logout()` action that clears user token and returns to `provisioned` state
+- On init: if device token exists but no user token, set state to `provisioned`
+
+### 5. New file: `src/pages/LoginScreen.tsx` -- Login form
+
+- Simple form with email/phone input + password input
+- Calls `apiClient.login()` on submit
+- On success, calls `completeLogin()` from DeviceContext
+- Shows error messages on failure
+- Branded with Impact ATMS logo (same style as provisioning screen)
+
+### 6. `src/components/device/DeviceRouter.tsx` -- Add login route
+
+- Add `/login` route that shows `LoginScreen` when state is `provisioned`
+- When state is `provisioned`, redirect `/` to `/login`
+- When state is `active`, redirect `/login` to `/`
+- Workers (heartbeat, sync, config) only start after login (state = `active`)
+
+### 7. `src/pages/ScanScreen.tsx` -- Add logout option
+
+- Add a logout button (in the header or diagnostics) so the user can sign out and return to login
+
+## State Machine (Updated)
+
+```text
+loading --> unprovisioned --> provisioned --> active
+                                  ^            |
+                                  |-- logout --|
+                              suspended (from heartbeat)
+```
+
+## Files Changed
 
 | File | Change |
 |------|--------|
-| `.github/workflows/android-build.yml` | Replace "Commit version manifest" step with the version above |
-
-## Note
-The APK build and GitHub Release steps are unaffected — they already succeed. This fix only addresses the final `version.json` commit/push step.
+| `src/data/remote/api-types.ts` | Add `LoginRequest`, `LoginResponse` types |
+| `src/data/remote/api-client.ts` | Fix `Device: HHM` header; add `login()` endpoint |
+| `src/security/token-store.ts` | Add user session storage methods |
+| `src/contexts/DeviceContext.tsx` | Add `provisioned` state, `completeLogin()`, `logout()` |
+| `src/pages/LoginScreen.tsx` | New login screen with email/phone + password form |
+| `src/components/device/DeviceRouter.tsx` | Add login route, update state routing |
+| `src/pages/ScanScreen.tsx` | Add logout action in header |
 
