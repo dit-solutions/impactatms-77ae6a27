@@ -1,57 +1,64 @@
 
 
-# Fix: Align API Client with Actual Backend Endpoints
+# Fix: GitHub Actions Version Manifest Push Failure
 
-## The Problem
-The 404 error happens because the app is hitting **wrong API paths**. The app calls `/api/device/provision` but your backend expects `/api/v1/handheld/provision`. The request body format is also wrong -- the app wraps device info in a nested `device_fingerprint` object, but your backend expects flat fields.
+## Problem
 
-## What's Wrong (Current vs Correct)
+The CI build succeeds (APK is built and released) but the final step that commits `version.json` back to the repo fails because:
 
-| Item | App Currently Sends | Backend Expects |
-|------|-------------------|-----------------|
-| Provision path | `/api/device/provision` | `/api/v1/handheld/provision` |
-| Heartbeat path | `/api/device/heartbeat` | `/api/v1/handheld/heartbeat` |
-| Provision body | `{ provisioning_token, device_fingerprint: { android_id, manufacturer, model, ... } }` | `{ provisioning_token, android_id, model, os_version, app_version }` |
-| Provision response | `{ device_id, device_token, config: { ... } }` | `{ message, device_id, device_token }` |
+1. `npx cap sync` earlier in the workflow modifies tracked files in `android/`, leaving unstaged changes that block `git pull --rebase`.
+2. Lovable's own commits land on `main` while the build runs, so the push is rejected with "remote contains work you do not have locally."
 
-## Changes
+## Solution
 
-### 1. `src/data/remote/api-types.ts` -- Fix request/response types
+Update the "Commit version manifest" step in `.github/workflows/android-build.yml` to:
 
-- **ProvisionRequest**: Change from nested `device_fingerprint` object to flat fields matching the backend:
-  ```
-  provisioning_token, android_id, model, os_version, app_version
-  ```
-- **ProvisionResponse**: Change to match actual response:
-  ```
-  message, device_id, device_token
-  ```
-- Remove the `DeviceFingerprint` interface (no longer needed as a separate type)
+1. **Stash or reset** unrelated changes before pulling — use `git checkout -- .` or `git stash` to clear modifications from `cap sync`.
+2. **Only stage `version.json`** — ensure no other modified files sneak into the commit.
+3. **Force-pull with autostash** — use `git pull --rebase --autostash` so it handles any remaining dirty state.
+4. **Retry push with a short loop** — if the push still fails due to a race, pull and retry (up to 3 attempts).
 
-### 2. `src/data/remote/api-client.ts` -- Fix endpoint paths
+### Updated step (replaces the current "Commit version manifest" step):
 
-- Provision: `/api/device/provision` changes to `/api/v1/handheld/provision`
-- Heartbeat: `/api/device/heartbeat` changes to `/api/v1/handheld/heartbeat`
-- Add `Accept: application/json` header to all requests (matching Postman collection)
+```yaml
+- name: Commit version manifest
+  if: success()
+  run: |
+    git config user.name "github-actions[bot]"
+    git config user.email "github-actions[bot]@users.noreply.github.com"
 
-### 3. `src/pages/ProvisioningScreen.tsx` -- Fix provisioning call
+    # Reset all unstaged changes from cap sync / build
+    git checkout -- .
 
-- Instead of collecting a full `DeviceFingerprint` object, collect the individual fields (`android_id`, `model`, `os_version`, `app_version`) and send them flat in the request body
-- Handle the simpler response (no `config` object in the provisioning response -- config may come from a separate call or not at all initially)
+    # Stage only version.json
+    git add public/version.json
+    git diff --cached --quiet && echo "No changes to commit" && exit 0
 
-### 4. `src/security/device-fingerprint.ts` -- Simplify to return flat fields
+    git commit -m "chore: update version manifest to v1.0.${{ github.run_number }}"
 
-- Update the function to return the 4 flat fields the backend needs: `android_id`, `model`, `os_version`, `app_version`
-- Remove `manufacturer` and `app_signature_hash` which the backend doesn't use
+    # Retry push up to 3 times (handles race with Lovable commits)
+    for i in 1 2 3; do
+      git pull --rebase origin main && git push origin main && exit 0
+      echo "Push attempt $i failed, retrying..."
+      sleep 2
+    done
+    echo "WARNING: Could not push version.json after 3 attempts (non-fatal)"
+```
 
-### 5. `src/contexts/DeviceContext.tsx` -- Fix completeProvisioning
+### Why this works
 
-- The `completeProvisioning` function currently expects a `config` parameter from the provision response, but the backend doesn't return config during provisioning
-- Update to work without config on initial provisioning (config can be fetched separately later)
+| Problem | Fix |
+|---------|-----|
+| Unstaged changes from `cap sync` block rebase | `git checkout -- .` resets the working tree before pulling |
+| Remote is ahead (Lovable pushed) | `git pull --rebase` before push, with retry loop |
+| Push still rejected on race | 3 retry attempts with 2s delay; exits gracefully if all fail |
 
-## After This Fix
-- QR scan will extract `backend_url` and `provisioning_token`
-- App will POST to `{backend_url}/api/v1/handheld/provision` with the correct flat body
-- App will save the returned `device_token` and `device_id` for all future authenticated API calls
-- All subsequent API calls (heartbeat, etc.) will use `Authorization: Device {token}` header with the correct paths
+### Files changed
+
+| File | Change |
+|------|--------|
+| `.github/workflows/android-build.yml` | Replace "Commit version manifest" step with the version above |
+
+## Note
+The APK build and GitHub Release steps are unaffected — they already succeed. This fix only addresses the final `version.json` commit/push step.
 
