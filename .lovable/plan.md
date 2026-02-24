@@ -1,85 +1,79 @@
 
 
-# Fix: Blank Screen After Login + Back Button
+# Fix: Lanes Dropdown Empty After Login
 
-## Root Cause
+## Problem
 
-After login, `deviceState` becomes `'active'`, which renders `ScanScreen` and starts workers (heartbeat, config, sync, fetchLanes). The blank screen is caused by:
+The `fetchLanes()` call is made after login, but the dropdown remains empty. The token storage and auth header injection are working (login/logout confirmed working). The issue is one of:
 
-1. **`fetchLanes()` response parsing** — Laravel APIs typically return `{ data: [...] }`, but the code expects a plain `Lane[]` array. When `setLanes()` receives an object instead of an array, `lanes.map()` in ScanScreen crashes the entire component tree.
-
-2. **`Lane.id` type mismatch** — The API likely returns `id` as a number, but `SelectItem` requires a string `value`. This causes a silent render failure.
-
-3. **No error boundary** — A crash in any child component results in a completely blank screen with no recovery option.
-
-4. **Back button listener** — `@capacitor/app`'s `App.addListener('backButton')` may fail silently on web, but should work on native. However, if the component tree crashes before the listener is set up, the back button won't work either.
+1. **Silent failure** -- The `fetchLanes` catch block only logs a warning, so if the API returns a 401 or error, it's invisible to the user
+2. **Response format mismatch** -- The Laravel API may wrap the lanes in a format not handled (e.g., `{ "lanes": [...] }`, paginated response, or nested `data` with metadata)
+3. **Race condition** -- The useEffect in DeviceRouter may fire before the token is fully persisted
 
 ## Changes
 
-### 1. Fix `fetchLanes` response parsing (`src/data/remote/api-client.ts`)
+### 1. Add detailed response logging in `fetchLanes` (`src/data/remote/api-client.ts`)
 
-Handle both `Lane[]` and `{ data: Lane[] }` response formats:
+Log the raw response shape so we can see exactly what the server returns:
 
 ```typescript
 async fetchLanes(): Promise<Lane[]> {
-  const raw = await this.request<Lane[] | { data: Lane[] }>(
+  const raw = await this.request<any>(
     '/api/v1/handheld/lanes',
     { method: 'GET' }
   );
-  return Array.isArray(raw) ? raw : (raw as any).data || [];
+  logger.info(`fetchLanes raw response: ${JSON.stringify(raw).substring(0, 500)}`);
+  
+  // Handle: plain array, { data: [...] }, { lanes: [...] }
+  if (Array.isArray(raw)) return raw;
+  if (raw?.data && Array.isArray(raw.data)) return raw.data;
+  if (raw?.lanes && Array.isArray(raw.lanes)) return raw.lanes;
+  
+  logger.warn(`fetchLanes: unexpected response shape — keys: ${Object.keys(raw || {})}`);
+  return [];
 }
 ```
 
-### 2. Coerce `Lane.id` to string (`src/contexts/DeviceContext.tsx`)
+### 2. Improve error logging in `fetchLanes` callback (`src/contexts/DeviceContext.tsx`)
 
-In `fetchLanes` callback, ensure `id` is always a string:
+Log the full error including status code so auth issues are visible:
 
 ```typescript
 const fetchLanes = useCallback(async () => {
   try {
+    logger.info('Fetching lanes...');
     const result = await apiClient.fetchLanes();
     const normalized = result.map(l => ({ ...l, id: String(l.id) }));
     setLanes(normalized);
     localStorage.setItem(LANES_KEY, JSON.stringify(normalized));
-    logger.info(`Fetched ${normalized.length} lanes`);
-  } catch (err) {
-    logger.warn(`Failed to fetch lanes: ${err}`);
+    logger.info(`Fetched ${normalized.length} lanes: ${JSON.stringify(normalized).substring(0, 300)}`);
+  } catch (err: any) {
+    logger.error(`Failed to fetch lanes: ${err?.message || err} (status: ${err?.status || 'unknown'})`);
   }
 }, []);
 ```
 
-### 3. Add an Error Boundary (new file `src/components/device/ErrorBoundary.tsx`)
+### 3. Also call `fetchLanes` from `completeLogin` to eliminate timing issues (`src/contexts/DeviceContext.tsx`)
 
-A simple React error boundary that catches crashes and shows a recovery UI (with a "Reload" button) instead of a blank screen.
-
-### 4. Wrap `DeviceRouter` with Error Boundary (`src/App.tsx`)
-
-```tsx
-<DeviceProvider>
-  <ErrorBoundary>
-    <DeviceRouter />
-  </ErrorBoundary>
-</DeviceProvider>
-```
-
-### 5. Defensive `updateConfig` callback (`src/contexts/DeviceContext.tsx`)
-
-Handle wrapped config response:
+Instead of relying solely on the DeviceRouter useEffect, also trigger a lanes fetch right after login succeeds:
 
 ```typescript
-const updateConfig = useCallback((newConfig: DeviceConfigResponse) => {
-  setConfig(newConfig);
-  localStorage.setItem('device_config', JSON.stringify(newConfig));
-  logger.info(`Config updated — Plaza: ${newConfig?.plaza?.name ?? 'unknown'}`);
-}, []);
+const completeLogin = useCallback(async (user: LoginUser, token: string) => {
+  await tokenStore.setUserToken(token);
+  await tokenStore.setUserSession(user as unknown as Record<string, unknown>);
+  setCurrentUser(user);
+  setDeviceState('active');
+  logger.info(`User logged in: ${user.name} (${user.email})`);
+  
+  // Fetch lanes immediately after login
+  fetchLanes();
+}, [fetchLanes]);
 ```
 
 ## File Summary
 
 | File | Change |
 |------|--------|
-| `src/data/remote/api-client.ts` | Handle `{ data: [...] }` wrapper in `fetchLanes` |
-| `src/contexts/DeviceContext.tsx` | Coerce `Lane.id` to string, defensive config logging |
-| `src/components/device/ErrorBoundary.tsx` | New error boundary component |
-| `src/App.tsx` | Wrap router with ErrorBoundary |
+| `src/data/remote/api-client.ts` | Add raw response logging, handle `{ lanes: [...] }` format |
+| `src/contexts/DeviceContext.tsx` | Improve error logging in fetchLanes, call fetchLanes from completeLogin |
 
