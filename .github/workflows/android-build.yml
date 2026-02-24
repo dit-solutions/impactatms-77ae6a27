@@ -123,10 +123,23 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin main || git pull --rebase origin master || true
+
+          # Reset all unstaged changes from cap sync / build
+          git checkout -- .
+
+          # Stage only version.json
           git add public/version.json
-          git commit -m "chore: update version manifest to v1.0.${{ github.run_number }}" || echo "No changes to commit"
-          git push
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+
+          git commit -m "chore: update version manifest to v1.0.${{ github.run_number }}"
+
+          # Retry push up to 3 times (handles race with Lovable commits)
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push origin main && exit 0
+            echo "Push attempt $i failed, retrying..."
+            sleep 2
+          done
+          echo "WARNING: Could not push version.json after 3 attempts (non-fatal)"
 
       - name: Upload build logs on failure
         if: failure()
