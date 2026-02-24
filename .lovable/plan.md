@@ -1,19 +1,22 @@
 
 
-# Fix: Replace 404 catch-all with redirect to device flow
+# Fix: Add Camera Permission for QR Scanning
 
 ## Problem
-The app is stuck on `/login` (a deleted route) showing a 404 page. The catch-all route renders `NotFound` instead of redirecting to the new device provisioning flow.
+The Android manifest is missing the `CAMERA` permission. Without it, the WebView inside Capacitor silently denies camera access — no prompt is shown, and the app immediately displays "Camera access denied."
 
 ## Solution
-One small change in `src/components/device/DeviceRouter.tsx`:
+Two changes:
 
-- **Line 95**: Replace `<Route path="*" element={<NotFound />} />` with `<Route path="*" element={<Navigate to="/" replace />} />`
-- **Line 17**: Remove the unused `NotFound` import
+### 1. `android/app/src/main/AndroidManifest.xml`
+Add the camera permission and feature declaration:
+```xml
+<uses-permission android:name="android.permission.CAMERA" />
+<uses-feature android:name="android.hardware.camera" android:required="false" />
+```
 
-This ensures any old/unknown URL (like `/login`) redirects to `/`, where the `DeviceRouter` logic takes over:
-- No token? Redirects to `/setup` (provisioning via QR scan)
-- Active? Shows `ScanScreen`
-- Suspended? Shows `DeviceLockedScreen`
+### 2. `src/pages/ProvisioningScreen.tsx`
+Improve the error message to distinguish between "permission denied" and other camera failures, and add a retry hint so the user knows they can tap the button again after granting permission in Android settings.
 
-No mock APIs, no extra steps -- just the real device provisioning flow as designed.
+After this change, you will need to run `npx cap sync` on the device to pick up the updated manifest.
+
