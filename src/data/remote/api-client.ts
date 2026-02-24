@@ -13,6 +13,8 @@ import type {
   DeviceConfigResponse,
   BatchReadRequest,
   BatchReadResponse,
+  LoginRequest,
+  LoginResponse,
 } from './api-types';
 
 class ApiClient {
@@ -65,7 +67,7 @@ class ApiClient {
       if (!token) {
         throw new ApiAuthError('Device token missing');
       }
-      headers['Authorization'] = `Device ${token}`;
+      headers['Device'] = `HHM ${token}`;
     }
 
     const url = `${this.baseUrl}${path}`;
@@ -125,6 +127,13 @@ class ApiClient {
   async submitReadsBatch(req: BatchReadRequest): Promise<BatchReadResponse> {
     return this.request<BatchReadResponse>(
       '/api/device/fastag-read/batch',
+      { method: 'POST', body: JSON.stringify(req) }
+    );
+  }
+
+  async login(req: LoginRequest): Promise<LoginResponse> {
+    return this.request<LoginResponse>(
+      '/api/v1/handheld/auth/login',
       { method: 'POST', body: JSON.stringify(req) }
     );
   }

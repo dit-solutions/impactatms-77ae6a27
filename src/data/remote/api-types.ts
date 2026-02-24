@@ -90,3 +90,21 @@ export interface ReadResult {
 export interface BatchReadResponse {
   results: ReadResult[];
 }
+
+// --- Auth / Login ---
+
+export interface LoginRequest {
+  login: string;
+  password: string;
+}
+
+export interface LoginUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface LoginResponse {
+  message: string;
+  user: LoginUser;
+}
