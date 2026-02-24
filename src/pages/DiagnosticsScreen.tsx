@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   ArrowLeft, Settings as SettingsIcon, Zap, Repeat, Power, PowerOff,
-  Bug, Wifi, WifiOff, Activity, Download, RotateCcw, CheckCircle, XCircle,
-  Loader2, Database
+  Bug, Wifi, WifiOff, Activity, Download, RotateCcw,
+  Loader2, Trash2, Clock
 } from 'lucide-react';
 import { RfidModeSwitch } from '@/components/rfid/RfidModeSwitch';
 import { RfidPowerSlider } from '@/components/rfid/RfidPowerSlider';
@@ -18,13 +20,17 @@ import { rfidService } from '@/services/rfid';
 import { useDevice } from '@/contexts/DeviceContext';
 import { logger } from '@/utils/logger';
 import { apiClient } from '@/data/remote/api-client';
+import { db } from '@/data/local/database';
 import { toast } from '@/hooks/use-toast';
+import type { PendingRead } from '@/data/local/entities';
 
 const DiagnosticsScreen = () => {
   const { power, mode, isConnected, setPower, setMode, refreshStatus } = useRfidSettings();
   const { deviceId, config, lastHeartbeat, lastSync, pendingCount, resetDevice } = useDevice();
   const [connecting, setConnecting] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [recentReads, setRecentReads] = useState<PendingRead[]>([]);
+  const [loadingReads, setLoadingReads] = useState(false);
   const navigate = useNavigate();
 
   const handleConnect = async () => {
@@ -59,7 +65,7 @@ const DiagnosticsScreen = () => {
   };
 
   const handleResetDevice = async () => {
-    if (confirm('This will erase all device data and return to the setup screen. Continue?')) {
+    if (confirm('⚠️ This will erase ALL device data and return to the setup screen. This action cannot be undone. Continue?')) {
       await resetDevice();
       navigate('/');
     }
@@ -68,6 +74,26 @@ const DiagnosticsScreen = () => {
   const handleExportLogs = () => {
     logger.downloadLogs();
     toast({ title: 'Logs Exported', description: 'Log file downloaded' });
+  };
+
+  const loadRecentReads = async () => {
+    setLoadingReads(true);
+    try {
+      const reads = await db.getRecentReads(30);
+      setRecentReads(reads);
+    } catch (err) {
+      logger.warn(`Failed to load recent reads: ${err}`);
+    } finally {
+      setLoadingReads(false);
+    }
+  };
+
+  const handleClearOldLogs = async () => {
+    if (confirm('Delete scanned tag logs older than 30 days?')) {
+      const deleted = await db.deleteOlderThan(30);
+      toast({ title: 'Cleared', description: `${deleted} old entries removed` });
+      loadRecentReads();
+    }
   };
 
   return (
@@ -102,13 +128,13 @@ const DiagnosticsScreen = () => {
               <SettingsIcon className="h-4 w-4 mr-1" />
               Reader
             </TabsTrigger>
-            <TabsTrigger value="debug">
+            <TabsTrigger value="debug" onClick={loadRecentReads}>
               <Bug className="h-4 w-4 mr-1" />
               Debug
             </TabsTrigger>
           </TabsList>
 
-          {/* Device Info Tab */}
+          {/* Device Info Tab — only info, no actions */}
           <TabsContent value="device" className="space-y-4">
             <Card>
               <CardHeader className="pb-3">
@@ -116,14 +142,8 @@ const DiagnosticsScreen = () => {
               </CardHeader>
               <CardContent className="space-y-3">
                 <InfoRow label="Device ID" value={deviceId || 'Not provisioned'} />
-                <InfoRow
-                  label="Plaza"
-                  value={config?.plaza.name || '—'}
-                />
-                <InfoRow
-                  label="Lane"
-                  value={config?.lane.name || '—'}
-                />
+                <InfoRow label="Plaza" value={config?.plaza.name || '—'} />
+                <InfoRow label="Lane" value={config?.lane.name || '—'} />
                 <Separator />
                 <InfoRow
                   label="Last Heartbeat"
@@ -141,42 +161,6 @@ const DiagnosticsScreen = () => {
               </CardContent>
             </Card>
 
-            {/* Actions */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Actions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <Button
-                  variant="outline"
-                  className="w-full justify-start"
-                  onClick={handleTestApi}
-                  disabled={testing}
-                >
-                  {testing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Activity className="h-4 w-4 mr-2" />}
-                  Test API Connection
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start"
-                  onClick={handleExportLogs}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Export Logs
-                </Button>
-                <Separator />
-                <Button
-                  variant="destructive"
-                  className="w-full justify-start"
-                  onClick={handleResetDevice}
-                >
-                  <RotateCcw className="h-4 w-4 mr-2" />
-                  Reset Device
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* About */}
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">About</CardTitle>
@@ -248,9 +232,105 @@ const DiagnosticsScreen = () => {
             </Card>
           </TabsContent>
 
-          {/* Debug Tab */}
-          <TabsContent value="debug">
+          {/* Debug Tab — includes actions, tag log, reset */}
+          <TabsContent value="debug" className="space-y-4">
             <RfidDebugPanel />
+
+            {/* Actions */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Actions</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={handleTestApi}
+                  disabled={testing}
+                >
+                  {testing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Activity className="h-4 w-4 mr-2" />}
+                  Test API Connection
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={handleExportLogs}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Export Logs
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Scanned Tags Log */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Scanned Tags (30 days)
+                  </CardTitle>
+                  <Button variant="ghost" size="sm" onClick={handleClearOldLogs}>
+                    <Trash2 className="h-3 w-3 mr-1" />
+                    Clear Old
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loadingReads ? (
+                  <div className="flex justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : recentReads.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">No scanned tags yet</p>
+                ) : (
+                  <ScrollArea className="h-64">
+                    <div className="space-y-2">
+                      {recentReads.map((read, i) => (
+                        <div key={read.id || i} className="flex items-center justify-between text-xs border-b border-border pb-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-mono truncate">{read.epc}</p>
+                            <p className="text-muted-foreground">
+                              {new Date(read.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 ml-2 shrink-0">
+                            <Badge variant={read.syncStatus === 'synced' ? 'default' : 'secondary'} className="text-[10px]">
+                              {read.syncStatus}
+                            </Badge>
+                            {read.action && (
+                              <Badge variant={read.action === 'ALLOW' ? 'default' : 'destructive'} className="text-[10px]">
+                                {read.action}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Danger Zone */}
+            <Card className="border-destructive/30">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base text-destructive">Danger Zone</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="destructive"
+                  className="w-full justify-start"
+                  onClick={handleResetDevice}
+                >
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Reset Device
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Erases all device data and returns to provisioning setup.
+                </p>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>

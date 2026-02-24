@@ -1,5 +1,5 @@
 /**
- * DeviceRouter — handles navigation based on device state.
+ * DeviceRouter — handles navigation based on device state + Android back button.
  */
 
 import React, { useEffect } from 'react';
@@ -7,7 +7,8 @@ import { useDevice } from '@/contexts/DeviceContext';
 import { heartbeatWorker } from '@/workers/heartbeat-worker';
 import { syncWorker } from '@/workers/sync-worker';
 import { configFetcher } from '@/domain/use-cases/fetch-config';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { App } from '@capacitor/app';
 import SplashScreen from '@/pages/SplashScreen';
 import ProvisioningScreen from '@/pages/ProvisioningScreen';
 import LoginScreen from '@/pages/LoginScreen';
@@ -15,45 +16,62 @@ import ScanScreen from '@/pages/ScanScreen';
 import DeviceLockedScreen from '@/pages/DeviceLockedScreen';
 import DiagnosticsScreen from '@/pages/DiagnosticsScreen';
 
-
 export function DeviceRouter() {
   const {
     deviceState,
-    setDeviceStatus,
     updateConfig,
     setLastHeartbeat,
     setLastSync,
     setPendingCount,
+    handleConfigVersions,
+    fetchLanes,
   } = useDevice();
+
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Android hardware back button
+  useEffect(() => {
+    const listener = App.addListener('backButton', () => {
+      const path = location.pathname;
+      if (path === '/diagnostics') {
+        navigate('/');
+      } else {
+        // Root screens — minimize instead of closing
+        App.minimizeApp();
+      }
+    });
+
+    return () => {
+      listener.then(l => l.remove());
+    };
+  }, [location.pathname, navigate]);
 
   // Start/stop workers based on device state
   useEffect(() => {
-    if (deviceState === 'active' || deviceState === 'suspended') {
-      heartbeatWorker.setCallbacks(setDeviceStatus, setLastHeartbeat);
+    if (deviceState === 'active') {
+      heartbeatWorker.setCallbacks(handleConfigVersions, setLastHeartbeat);
       heartbeatWorker.start();
 
       configFetcher.setCallback(updateConfig);
       configFetcher.start();
-    }
 
-    if (deviceState === 'active') {
       syncWorker.setCallbacks(setLastSync, setPendingCount);
       syncWorker.start();
-    } else {
-      syncWorker.stop();
+
+      // Fetch lanes on login
+      fetchLanes();
     }
 
     return () => {};
-  }, [deviceState, setDeviceStatus, updateConfig, setLastHeartbeat, setLastSync, setPendingCount]);
+  }, [deviceState, handleConfigVersions, updateConfig, setLastHeartbeat, setLastSync, setPendingCount, fetchLanes]);
 
-  // Loading / splash
   if (deviceState === 'loading') {
     return <SplashScreen />;
   }
 
   return (
     <Routes>
-      {/* Provisioning */}
       <Route
         path="/setup"
         element={
@@ -63,7 +81,6 @@ export function DeviceRouter() {
         }
       />
 
-      {/* Login */}
       <Route
         path="/login"
         element={
@@ -75,7 +92,6 @@ export function DeviceRouter() {
         }
       />
 
-      {/* Main scan screen */}
       <Route
         path="/"
         element={
@@ -89,7 +105,6 @@ export function DeviceRouter() {
         }
       />
 
-      {/* Diagnostics */}
       <Route
         path="/diagnostics"
         element={
@@ -101,7 +116,6 @@ export function DeviceRouter() {
         }
       />
 
-      {/* Catch-all */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

@@ -15,13 +15,13 @@ import type {
   BatchReadResponse,
   LoginRequest,
   LoginResponse,
+  Lane,
 } from './api-types';
 
 class ApiClient {
   private baseUrl: string | null = null;
 
   setBaseUrl(url: string) {
-    // Strip trailing slash
     this.baseUrl = url.replace(/\/+$/, '');
   }
 
@@ -29,13 +29,11 @@ class ApiClient {
     return this.baseUrl;
   }
 
-  /** Load base URL from storage on init */
   async init() {
     const stored = localStorage.getItem('device_backend_url');
     if (stored) this.baseUrl = stored;
   }
 
-  /** Persist the base URL */
   persistBaseUrl(url: string) {
     this.setBaseUrl(url);
     localStorage.setItem('device_backend_url', this.baseUrl!);
@@ -61,7 +59,6 @@ class ApiClient {
       ...(options.headers as Record<string, string> || {}),
     };
 
-    // Inject device token
     if (!skipAuth) {
       const token = await tokenStore.getToken();
       if (!token) {
@@ -75,12 +72,8 @@ class ApiClient {
 
     let response: Response;
     try {
-      response = await fetch(url, {
-        ...options,
-        headers,
-      });
+      response = await fetch(url, { ...options, headers });
     } catch (networkErr) {
-      // CORS preflight failure or network error — fetch throws TypeError
       const errMsg = `Network error calling ${url} — possible CORS issue: ${String(networkErr)}`;
       logger.error(errMsg);
       throw new ApiError(errMsg, 0, String(networkErr));
@@ -106,7 +99,7 @@ class ApiClient {
     return this.request<ProvisionResponse>(
       '/api/v1/handheld/provision',
       { method: 'POST', body: JSON.stringify(req) },
-      true // no auth for provisioning
+      true
     );
   }
 
@@ -119,14 +112,21 @@ class ApiClient {
 
   async getConfig(): Promise<DeviceConfigResponse> {
     return this.request<DeviceConfigResponse>(
-      '/api/device/config',
+      '/api/v1/handheld/config',
+      { method: 'GET' }
+    );
+  }
+
+  async fetchLanes(): Promise<Lane[]> {
+    return this.request<Lane[]>(
+      '/api/v1/handheld/lanes',
       { method: 'GET' }
     );
   }
 
   async submitReadsBatch(req: BatchReadRequest): Promise<BatchReadResponse> {
     return this.request<BatchReadResponse>(
-      '/api/device/fastag-read/batch',
+      '/api/v1/handheld/fastag-read/batch',
       { method: 'POST', body: JSON.stringify(req) }
     );
   }
@@ -136,6 +136,17 @@ class ApiClient {
       '/api/v1/handheld/auth/login',
       { method: 'POST', body: JSON.stringify(req) }
     );
+  }
+
+  async logout(): Promise<void> {
+    try {
+      await this.request<{ message: string }>(
+        '/api/v1/handheld/auth/logout',
+        { method: 'POST' }
+      );
+    } catch (err) {
+      logger.warn(`Logout API call failed (best-effort): ${err}`);
+    }
   }
 }
 

@@ -4,16 +4,16 @@ All endpoints are relative to the `backend_url` extracted from the provisioning 
 
 ## Authentication
 
-All API calls (except `/api/device/provision`) must include:
+All API calls (except `/api/v1/handheld/provision`) must include:
 ```
-Authorization: Device <device_token>
+Device: HHM <device_token>
 ```
 
 If the token is missing or invalid, the API returns `401 Unauthorized` and the app must redirect to the Provisioning screen.
 
 ---
 
-## 1. POST /api/device/provision
+## 1. POST /api/v1/handheld/provision
 
 **Purpose:** Register a new device with the backend.
 
@@ -26,39 +26,66 @@ Content-Type: application/json
 ```json
 {
   "provisioning_token": "one-time-short-lived-token-from-qr",
-  "device_fingerprint": {
-    "android_id": "abc123def456",
-    "manufacturer": "Mivanta",
-    "model": "CX1500N",
-    "os_version": "12",
-    "app_version": "1.0.5",
-    "app_signature_hash": "sha256:abc..."
-  }
+  "android_id": "abc123def456",
+  "model": "CX1500N",
+  "os_version": "12",
+  "app_version": "1.0.5"
 }
 ```
 
 **Response (200):**
 ```json
 {
+  "message": "Device provisioned",
   "device_id": "DEV-001",
-  "device_token": "long-lived-jwt-or-opaque-token",
-  "config": {
-    "heartbeat_interval_seconds": 30,
-    "sync_interval_seconds": 60,
-    "config_refresh_interval_seconds": 300
+  "device_token": "long-lived-jwt-or-opaque-token"
+}
+```
+
+---
+
+## 2. POST /api/v1/handheld/auth/login
+
+**Purpose:** Authenticate an operator on a provisioned device.
+
+**Request:**
+```json
+{
+  "login": "user@example.com",
+  "password": "pass123"
+}
+```
+
+**Response (200):**
+```json
+{
+  "message": "Login successful",
+  "user": {
+    "id": "USR-001",
+    "name": "John Doe",
+    "email": "user@example.com"
   }
 }
 ```
 
-**Errors:**
-- `400` — Invalid or expired provisioning token
-- `409` — Device already provisioned
+---
+
+## 3. POST /api/v1/handheld/auth/logout
+
+**Purpose:** End the current operator session (best-effort).
+
+**Response (200):**
+```json
+{
+  "message": "Logged out"
+}
+```
 
 ---
 
-## 2. POST /api/device/heartbeat
+## 4. POST /api/v1/handheld/heartbeat
 
-**Purpose:** Periodic health check. Backend can suspend/activate the device.
+**Purpose:** Periodic health check. Backend returns config version info.
 
 **Request:**
 ```json
@@ -67,48 +94,34 @@ Content-Type: application/json
   "network_type": "wifi",
   "reader_status": "connected",
   "app_version": "1.0.5",
-  "gps": {
-    "latitude": 23.0225,
-    "longitude": 72.5714
+  "gps": { "latitude": 23.0225, "longitude": 72.5714 }
+}
+```
+
+**Response (200):**
+```json
+{
+  "message": "Heartbeat received",
+  "config_versions": {
+    "lanes": 1
   }
 }
 ```
 
-**Response (200):**
-```json
-{
-  "status": "ACTIVE",
-  "message": null,
-  "reason": null
-}
-```
-
-**Possible `status` values:** `ACTIVE`, `SUSPENDED`
-
-When `SUSPENDED`, the app locks the UI and stops scanning/syncing. Heartbeat continues.
+When `config_versions.lanes` changes, the app re-fetches the lanes list.
 
 ---
 
-## 3. GET /api/device/config
+## 5. GET /api/v1/handheld/config
 
-**Purpose:** Fetch server-driven configuration. Called on app start and periodically.
+**Purpose:** Fetch server-driven configuration.
 
 **Response (200):**
 ```json
 {
-  "plaza": {
-    "id": "PLZ-001",
-    "name": "Chakraoda Toll Plaza"
-  },
-  "lane": {
-    "id": "LN-003",
-    "name": "Lane 3"
-  },
-  "reader_config": {
-    "power_dbm": 25,
-    "rssi_threshold": -60,
-    "scan_mode": "single"
-  },
+  "plaza": { "id": "PLZ-001", "name": "Chakraoda Toll Plaza" },
+  "lane": { "id": "LN-003", "name": "Lane 3" },
+  "reader_config": { "power_dbm": 25, "rssi_threshold": -60, "scan_mode": "single" },
   "sync_interval_seconds": 60,
   "config_refresh_interval_seconds": 300,
   "heartbeat_interval_seconds": 30
@@ -117,7 +130,21 @@ When `SUSPENDED`, the app locks the UI and stops scanning/syncing. Heartbeat con
 
 ---
 
-## 4. POST /api/device/fastag-read/batch
+## 6. GET /api/v1/handheld/lanes
+
+**Purpose:** Fetch available lanes for this device.
+
+**Response (200):**
+```json
+[
+  { "id": "LN-001", "name": "Lane 1", "lane_number": 1 },
+  { "id": "LN-002", "name": "Lane 2", "lane_number": 2 }
+]
+```
+
+---
+
+## 7. POST /api/v1/handheld/fastag-read/batch
 
 **Purpose:** Upload one or more RFID tag reads. Backend is idempotent on `local_read_id`.
 
@@ -133,10 +160,7 @@ When `SUSPENDED`, the app locks the UI and stops scanning/syncing. Heartbeat con
       "rssi": -45,
       "antenna": 1,
       "timestamp": "2025-07-01T10:30:00Z",
-      "gps": {
-        "latitude": 23.0225,
-        "longitude": 72.5714
-      }
+      "gps": { "latitude": 23.0225, "longitude": 72.5714 }
     }
   ]
 }
@@ -155,5 +179,3 @@ When `SUSPENDED`, the app locks the UI and stops scanning/syncing. Heartbeat con
   ]
 }
 ```
-
-**Possible `action` values:** `ALLOW`, `REJECT`

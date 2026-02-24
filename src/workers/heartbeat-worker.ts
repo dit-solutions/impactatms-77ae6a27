@@ -9,39 +9,36 @@ import { networkStatus } from '@/utils/network-status';
 import { logger } from '@/utils/logger';
 import { getAppVersion } from '@/services/app-update/app-update-service';
 import { rfidService } from '@/services/rfid';
-import type { DeviceStatus } from '@/data/remote/api-types';
+import type { ConfigVersions } from '@/data/remote/api-types';
 
-type HeartbeatCallback = (status: DeviceStatus, message?: string | null) => void;
+type ConfigVersionsCallback = (versions: ConfigVersions) => void;
 type HeartbeatTimeCallback = (date: Date) => void;
 
 class HeartbeatWorker {
   private intervalId: number | null = null;
-  private intervalMs = 30000; // default 30s
-  private onStatusChange: HeartbeatCallback | null = null;
+  private intervalMs = 30000;
+  private onConfigVersions: ConfigVersionsCallback | null = null;
   private onHeartbeatSent: HeartbeatTimeCallback | null = null;
 
   setInterval(seconds: number) {
     this.intervalMs = seconds * 1000;
-    // Restart if running
     if (this.intervalId) {
       this.stop();
       this.start();
     }
   }
 
-  setCallbacks(onStatus: HeartbeatCallback, onSent: HeartbeatTimeCallback) {
-    this.onStatusChange = onStatus;
+  setCallbacks(onVersions: ConfigVersionsCallback, onSent: HeartbeatTimeCallback) {
+    this.onConfigVersions = onVersions;
     this.onHeartbeatSent = onSent;
   }
 
   start() {
     if (this.intervalId) return;
-    
-    // Send immediately
+
     this.send();
-    
+
     this.intervalId = window.setInterval(() => {
-      // Skip if page is hidden (save battery)
       if (document.visibilityState === 'hidden') return;
       this.send();
     }, this.intervalMs);
@@ -72,13 +69,15 @@ class HeartbeatWorker {
       });
 
       this.onHeartbeatSent?.(new Date());
-      this.onStatusChange?.(response.status, response.message);
 
-      logger.info(`Heartbeat OK — status: ${response.status}`);
+      if (response.config_versions) {
+        this.onConfigVersions?.(response.config_versions);
+      }
+
+      logger.info(`Heartbeat OK — ${response.message}`);
     } catch (err) {
       if (err instanceof ApiAuthError) {
         logger.error('Heartbeat auth failed');
-        // Don't change status — let the app handle re-provisioning
       } else {
         logger.warn(`Heartbeat failed: ${err}`);
       }
