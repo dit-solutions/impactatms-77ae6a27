@@ -8,6 +8,10 @@ export interface RfidTagData {
   rssi?: number;
   count?: number;
   timestamp: number;
+  /** TID from memory bank (optional, present for FASTag reads) */
+  tid?: string;
+  /** User memory bank data (optional, present for FASTag reads) */
+  userData?: string;
 }
 
 /**

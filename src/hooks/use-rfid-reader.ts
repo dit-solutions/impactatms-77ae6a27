@@ -51,14 +51,16 @@ export function useRfidReader(
       setLastFastTag(fastTag);
       setFastTagHistory(prev => [fastTag, ...prev].slice(0, 100));
       
-      const basicTag: RfidTagData = {
+      const fullTag: RfidTagData = {
         epc: fastTag.epc,
         rssi: fastTag.rssi,
-        timestamp: fastTag.timestamp
+        timestamp: fastTag.timestamp,
+        tid: fastTag.tid,
+        userData: fastTag.userData,
       };
-      setLastTag(basicTag);
-      setTagHistory(prev => [basicTag, ...prev].slice(0, 100));
-      onTagDetected?.(basicTag);
+      setLastTag(fullTag);
+      setTagHistory(prev => [fullTag, ...prev].slice(0, 100));
+      onTagDetected?.(fullTag);
       
       toast({
         title: 'Tag Scanned',
@@ -147,14 +149,16 @@ export function useRfidReader(
       setLastFastTag(fastTag);
       setFastTagHistory(prev => [fastTag, ...prev].slice(0, 100));
       
-      const basicTag: RfidTagData = {
+      const fullTag: RfidTagData = {
         epc: fastTag.epc,
         rssi: fastTag.rssi,
-        timestamp: fastTag.timestamp
+        timestamp: fastTag.timestamp,
+        tid: fastTag.tid,
+        userData: fastTag.userData,
       };
-      setLastTag(basicTag);
-      setTagHistory(prev => [basicTag, ...prev].slice(0, 100));
-      onTagDetected?.(basicTag);
+      setLastTag(fullTag);
+      setTagHistory(prev => [fullTag, ...prev].slice(0, 100));
+      onTagDetected?.(fullTag);
       
       const hasAllData = fastTag.tid && fastTag.userData;
       

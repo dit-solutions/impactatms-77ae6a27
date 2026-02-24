@@ -61,6 +61,9 @@ class SyncWorker {
 
       for (const r of pending) {
         try {
+          if (!r.tid && !r.userData) {
+            logger.warn(`Sync: read ${r.localReadId} missing tid/userData (legacy record)`);
+          }
           const response = await apiClient.submitRfidRead({
             tag_id: r.epc,
             tid: r.tid || '',
@@ -81,7 +84,8 @@ class SyncWorker {
             logger.error('Sync auth failed — stopping batch');
             break;
           }
-          logger.warn(`Failed to sync read ${r.localReadId}: ${err}`);
+          const status = (err as any)?.status || (err as any)?.response?.status || 'unknown';
+          logger.warn(`Failed to sync read ${r.localReadId}: status=${status} ${err}`);
         }
       }
 
