@@ -5,6 +5,7 @@
 
 const TOKEN_KEY = 'device_token';
 const DEVICE_ID_KEY = 'device_id';
+const USER_KEY = 'user_session';
 
 class TokenStore {
   async init() {
@@ -27,9 +28,27 @@ class TokenStore {
     return localStorage.getItem(DEVICE_ID_KEY);
   }
 
+  async setUserSession(data: Record<string, unknown>): Promise<void> {
+    localStorage.setItem(USER_KEY, JSON.stringify(data));
+  }
+
+  async getUserSession(): Promise<Record<string, unknown> | null> {
+    const raw = localStorage.getItem(USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }
+
+  async hasUserSession(): Promise<boolean> {
+    return !!localStorage.getItem(USER_KEY);
+  }
+
+  async clearUserSession(): Promise<void> {
+    localStorage.removeItem(USER_KEY);
+  }
+
   async clear(): Promise<void> {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(DEVICE_ID_KEY);
+    localStorage.removeItem(USER_KEY);
   }
 
   async hasToken(): Promise<boolean> {
