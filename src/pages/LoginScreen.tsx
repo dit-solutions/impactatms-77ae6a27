@@ -29,7 +29,7 @@ const LoginScreen = () => {
     setLoading(true);
     try {
       const response = await apiClient.login({ login: trimmedLogin, password });
-      await completeLogin(response.user);
+      await completeLogin(response.user, response.token);
       logger.info(`Login successful for ${response.user.email}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

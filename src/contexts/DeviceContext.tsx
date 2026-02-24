@@ -31,7 +31,7 @@ interface DeviceContextType {
 
   // Actions
   completeProvisioning: (deviceId: string, token: string, backendUrl: string) => Promise<void>;
-  completeLogin: (user: LoginUser) => Promise<void>;
+  completeLogin: (user: LoginUser, token: string) => Promise<void>;
   logout: () => Promise<void>;
   resetDevice: () => Promise<void>;
   updateConfig: (config: DeviceConfigResponse) => void;
@@ -151,7 +151,8 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     logger.info(`Provisioned as ${newDeviceId} — awaiting user login`);
   }, []);
 
-  const completeLogin = useCallback(async (user: LoginUser) => {
+  const completeLogin = useCallback(async (user: LoginUser, token: string) => {
+    await tokenStore.setUserToken(token);
     await tokenStore.setUserSession(user as unknown as Record<string, unknown>);
     setCurrentUser(user);
     setDeviceState('active');

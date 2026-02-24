@@ -65,6 +65,11 @@ class ApiClient {
         throw new ApiAuthError('Device token missing');
       }
       headers['Device'] = `HHM ${token}`;
+
+      const userToken = await tokenStore.getUserToken();
+      if (userToken) {
+        headers['Authorization'] = `Bearer ${userToken}`;
+      }
     }
 
     const url = `${this.baseUrl}${path}`;

@@ -114,6 +114,7 @@ export interface LoginUser {
 }
 
 export interface LoginResponse {
+  token: string;
   message: string;
   user: LoginUser;
 }
