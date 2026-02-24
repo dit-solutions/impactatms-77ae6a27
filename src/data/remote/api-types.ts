@@ -26,12 +26,13 @@ export interface HeartbeatRequest {
   gps?: { latitude: number; longitude: number } | null;
 }
 
-export type DeviceStatus = 'ACTIVE' | 'SUSPENDED';
+export interface ConfigVersions {
+  lanes: number;
+}
 
 export interface HeartbeatResponse {
-  status: DeviceStatus;
-  message?: string | null;
-  reason?: string | null;
+  message: string;
+  config_versions: ConfigVersions;
 }
 
 // --- Config ---
@@ -59,6 +60,14 @@ export interface DeviceConfigResponse {
   sync_interval_seconds: number;
   config_refresh_interval_seconds: number;
   heartbeat_interval_seconds: number;
+}
+
+// --- Lanes ---
+
+export interface Lane {
+  id: string;
+  name: string;
+  lane_number?: number;
 }
 
 // --- FASTag Reads ---

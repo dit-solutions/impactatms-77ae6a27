@@ -12,7 +12,7 @@ type ConfigCallback = (config: DeviceConfigResponse) => void;
 
 class ConfigFetcher {
   private intervalId: number | null = null;
-  private intervalMs = 300000; // default 5 min
+  private intervalMs = 300000;
   private onConfigReceived: ConfigCallback | null = null;
 
   setInterval(seconds: number) {
@@ -29,8 +29,7 @@ class ConfigFetcher {
 
   start() {
     if (this.intervalId) return;
-    
-    // Fetch immediately
+
     this.fetch();
 
     this.intervalId = window.setInterval(() => {
@@ -61,7 +60,6 @@ class ConfigFetcher {
     }
   }
 
-  /** Load cached config from localStorage */
   getCachedConfig(): DeviceConfigResponse | null {
     try {
       const raw = localStorage.getItem('device_config');

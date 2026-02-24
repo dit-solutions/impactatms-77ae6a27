@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Settings, WifiOff, LogOut } from 'lucide-react';
 import { RfidReaderPanel } from '@/components/rfid';
 import { useDevice } from '@/contexts/DeviceContext';
@@ -10,12 +10,17 @@ import type { RfidTagData } from '@/services/rfid';
 import logoLight from '@/assets/logo-light.png';
 
 const ScanScreen = () => {
-  const { config, isOnline, deviceId, logout, currentUser } = useDevice();
+  const { config, isOnline, lanes, selectedLane, setSelectedLane, logout, currentUser } = useDevice();
   const { captureRead, lastResult } = useReadCapture();
 
   const handleTagDetected = useCallback(async (tag: RfidTagData) => {
     await captureRead(tag);
   }, [captureRead]);
+
+  const handleLaneChange = useCallback((laneId: string) => {
+    const lane = lanes.find(l => l.id === laneId) || null;
+    setSelectedLane(lane);
+  }, [lanes, setSelectedLane]);
 
   return (
     <div className="min-h-screen bg-background p-4">
@@ -28,7 +33,7 @@ const ScanScreen = () => {
           </div>
         )}
 
-        <header className="mb-6">
+        <header className="mb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img src={logoLight} alt="Impact ATMS" className="h-10 w-auto dark:hidden" />
@@ -36,7 +41,7 @@ const ScanScreen = () => {
                 <h1 className="text-xl font-bold text-secondary">Impact ATMS</h1>
                 {config && (
                   <p className="text-xs text-muted-foreground">
-                    {config.plaza.name} • {config.lane.name}
+                    {config.plaza.name}
                   </p>
                 )}
               </div>
@@ -54,6 +59,28 @@ const ScanScreen = () => {
           </div>
         </header>
 
+        {/* Lane selector */}
+        <div className="mb-4">
+          <Select
+            value={selectedLane?.id || ''}
+            onValueChange={handleLaneChange}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select a lane to begin scanning" />
+            </SelectTrigger>
+            <SelectContent>
+              {lanes.map(lane => (
+                <SelectItem key={lane.id} value={lane.id}>
+                  {lane.name}{lane.lane_number != null ? ` (#${lane.lane_number})` : ''}
+                </SelectItem>
+              ))}
+              {lanes.length === 0 && (
+                <div className="px-3 py-2 text-sm text-muted-foreground">No lanes available</div>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* Last read result */}
         {lastResult && (
           <div className={`mb-4 p-4 rounded-xl text-center font-bold text-lg ${
@@ -69,7 +96,14 @@ const ScanScreen = () => {
           </div>
         )}
 
-        <RfidReaderPanel onTagDetected={handleTagDetected} />
+        {/* Disable reader if no lane selected */}
+        {!selectedLane ? (
+          <div className="p-8 rounded-xl border border-dashed border-muted-foreground/30 text-center text-muted-foreground">
+            <p className="text-sm">Please select a lane above to start scanning</p>
+          </div>
+        ) : (
+          <RfidReaderPanel onTagDetected={handleTagDetected} />
+        )}
       </div>
     </div>
   );
