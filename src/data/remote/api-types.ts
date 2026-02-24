@@ -2,28 +2,18 @@
 
 // --- Provisioning ---
 
-export interface DeviceFingerprint {
+export interface ProvisionRequest {
+  provisioning_token: string;
   android_id: string;
-  manufacturer: string;
   model: string;
   os_version: string;
   app_version: string;
-  app_signature_hash: string;
-}
-
-export interface ProvisionRequest {
-  provisioning_token: string;
-  device_fingerprint: DeviceFingerprint;
 }
 
 export interface ProvisionResponse {
+  message: string;
   device_id: string;
   device_token: string;
-  config: {
-    heartbeat_interval_seconds: number;
-    sync_interval_seconds: number;
-    config_refresh_interval_seconds: number;
-  };
 }
 
 // --- Heartbeat ---

@@ -21,7 +21,7 @@ interface DeviceContextType {
   pendingCount: number;
 
   // Actions
-  completeProvisioning: (deviceId: string, token: string, backendUrl: string, config: any) => Promise<void>;
+  completeProvisioning: (deviceId: string, token: string, backendUrl: string) => Promise<void>;
   resetDevice: () => Promise<void>;
   setDeviceStatus: (status: DeviceStatus, message?: string | null) => void;
   updateConfig: (config: DeviceConfigResponse) => void;
@@ -75,7 +75,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const completeProvisioning = useCallback(async (
-    newDeviceId: string, token: string, backendUrl: string, configTimers: any
+    newDeviceId: string, token: string, backendUrl: string
   ) => {
     apiClient.persistBaseUrl(backendUrl);
     await tokenStore.setToken(token);

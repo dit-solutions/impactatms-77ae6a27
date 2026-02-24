@@ -55,6 +55,7 @@ class ApiClient {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
       ...(options.headers as Record<string, string> || {}),
     };
 
@@ -101,7 +102,7 @@ class ApiClient {
 
   async provision(req: ProvisionRequest): Promise<ProvisionResponse> {
     return this.request<ProvisionResponse>(
-      '/api/device/provision',
+      '/api/v1/handheld/provision',
       { method: 'POST', body: JSON.stringify(req) },
       true // no auth for provisioning
     );
@@ -109,7 +110,7 @@ class ApiClient {
 
   async heartbeat(req: HeartbeatRequest): Promise<HeartbeatResponse> {
     return this.request<HeartbeatResponse>(
-      '/api/device/heartbeat',
+      '/api/v1/handheld/heartbeat',
       { method: 'POST', body: JSON.stringify(req) }
     );
   }

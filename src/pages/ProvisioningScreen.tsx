@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { QrCode, Camera, Loader2, AlertCircle } from 'lucide-react';
 import { useDevice } from '@/contexts/DeviceContext';
 import { apiClient } from '@/data/remote/api-client';
-import { collectDeviceFingerprint } from '@/security/device-fingerprint';
+import { collectDeviceInfo } from '@/security/device-fingerprint';
 import { logger } from '@/utils/logger';
 import { toast } from '@/hooks/use-toast';
 import logoLight from '@/assets/logo-light.png';
@@ -87,18 +87,17 @@ const ProvisioningScreen = () => {
       logger.info(`QR scanned — backend: ${qrData.backend_url}`);
       apiClient.setBaseUrl(qrData.backend_url);
 
-      const fingerprint = await collectDeviceFingerprint();
+      const deviceInfo = await collectDeviceInfo();
 
       const response = await apiClient.provision({
         provisioning_token: qrData.provisioning_token,
-        device_fingerprint: fingerprint,
+        ...deviceInfo,
       });
 
       await completeProvisioning(
         response.device_id,
         response.device_token,
         qrData.backend_url,
-        response.config
       );
 
       toast({
