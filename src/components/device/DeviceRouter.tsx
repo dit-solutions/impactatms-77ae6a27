@@ -14,7 +14,7 @@ import ProvisioningScreen from '@/pages/ProvisioningScreen';
 import ScanScreen from '@/pages/ScanScreen';
 import DeviceLockedScreen from '@/pages/DeviceLockedScreen';
 import DiagnosticsScreen from '@/pages/DiagnosticsScreen';
-import NotFound from '@/pages/NotFound';
+
 
 export function DeviceRouter() {
   const {
@@ -92,7 +92,7 @@ export function DeviceRouter() {
       />
 
       {/* Catch-all */}
-      <Route path="*" element={<NotFound />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
