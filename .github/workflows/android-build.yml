@@ -43,6 +43,9 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      - name: Fix Gradle wrapper permissions
+        run: chmod +x android/gradlew
+
       - name: Generate Gradle wrapper
         working-directory: android
         run: gradle wrapper --gradle-version 8.11.1 --distribution-type all
