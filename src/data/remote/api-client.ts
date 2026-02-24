@@ -123,11 +123,18 @@ class ApiClient {
   }
 
   async fetchLanes(): Promise<Lane[]> {
-    const raw = await this.request<Lane[] | { data: Lane[] }>(
+    const raw = await this.request<any>(
       '/api/v1/handheld/lanes',
       { method: 'GET' }
     );
-    return Array.isArray(raw) ? raw : (raw as any).data || [];
+    logger.info(`fetchLanes raw response: ${JSON.stringify(raw).substring(0, 500)}`);
+    
+    if (Array.isArray(raw)) return raw;
+    if (raw?.data && Array.isArray(raw.data)) return raw.data;
+    if (raw?.lanes && Array.isArray(raw.lanes)) return raw.lanes;
+    
+    logger.warn(`fetchLanes: unexpected response shape — keys: ${Object.keys(raw || {})}`);
+    return [];
   }
 
   async submitReadsBatch(req: BatchReadRequest): Promise<BatchReadResponse> {

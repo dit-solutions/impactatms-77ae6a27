@@ -114,13 +114,14 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
 
   const fetchLanes = useCallback(async () => {
     try {
+      logger.info('Fetching lanes...');
       const result = await apiClient.fetchLanes();
       const normalized = result.map(l => ({ ...l, id: String(l.id) }));
       setLanes(normalized);
       localStorage.setItem(LANES_KEY, JSON.stringify(normalized));
-      logger.info(`Fetched ${normalized.length} lanes`);
-    } catch (err) {
-      logger.warn(`Failed to fetch lanes: ${err}`);
+      logger.info(`Fetched ${normalized.length} lanes: ${JSON.stringify(normalized).substring(0, 300)}`);
+    } catch (err: any) {
+      logger.error(`Failed to fetch lanes: ${err?.message || err} (status: ${err?.status || 'unknown'})`);
     }
   }, []);
 
@@ -158,7 +159,10 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     setCurrentUser(user);
     setDeviceState('active');
     logger.info(`User logged in: ${user.name} (${user.email})`);
-  }, []);
+    
+    // Fetch lanes immediately after login to avoid race conditions
+    fetchLanes();
+  }, [fetchLanes]);
 
   const logout = useCallback(async () => {
     // Stop all workers first to prevent state resets
