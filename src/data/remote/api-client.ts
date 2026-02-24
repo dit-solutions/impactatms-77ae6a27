@@ -68,22 +68,30 @@ class ApiClient {
     }
 
     const url = `${this.baseUrl}${path}`;
-    logger.info(`API ${options.method || 'GET'} ${path}`);
+    logger.info(`API ${options.method || 'GET'} ${url}`);
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...options,
+        headers,
+      });
+    } catch (networkErr) {
+      // CORS preflight failure or network error — fetch throws TypeError
+      const errMsg = `Network error calling ${url} — possible CORS issue: ${String(networkErr)}`;
+      logger.error(errMsg);
+      throw new ApiError(errMsg, 0, String(networkErr));
+    }
 
     if (response.status === 401) {
-      logger.error('API auth failed — 401');
+      logger.error(`API auth failed — 401 at ${url}`);
       throw new ApiAuthError('Device authentication failed');
     }
 
     if (!response.ok) {
       const body = await response.text().catch(() => '');
-      logger.error(`API error ${response.status}: ${body}`);
-      throw new ApiError(`API error: ${response.status}`, response.status, body);
+      logger.error(`API error ${response.status} at ${url}: ${body}`);
+      throw new ApiError(`API error ${response.status} at ${url}`, response.status, body);
     }
 
     return response.json();
