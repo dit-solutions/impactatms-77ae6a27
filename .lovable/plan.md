@@ -1,81 +1,57 @@
 
 
-# Fix: Add debug logging for 404 provisioning error
+# Fix: Align API Client with Actual Backend Endpoints
 
-## Root Cause (Most Likely)
+## The Problem
+The 404 error happens because the app is hitting **wrong API paths**. The app calls `/api/device/provision` but your backend expects `/api/v1/handheld/provision`. The request body format is also wrong -- the app wraps device info in a nested `device_fingerprint` object, but your backend expects flat fields.
 
-**CORS preflight failure.** When the app (running in a WebView or browser) calls `POST /api/device/provision`, the browser first sends an `OPTIONS` preflight request. If your backend doesn't respond to `OPTIONS` with proper CORS headers (`Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`), the preflight returns 404 and the browser reports it as a failed request.
+## What's Wrong (Current vs Correct)
 
-Postman works because it doesn't perform CORS preflight checks.
+| Item | App Currently Sends | Backend Expects |
+|------|-------------------|-----------------|
+| Provision path | `/api/device/provision` | `/api/v1/handheld/provision` |
+| Heartbeat path | `/api/device/heartbeat` | `/api/v1/handheld/heartbeat` |
+| Provision body | `{ provisioning_token, device_fingerprint: { android_id, manufacturer, model, ... } }` | `{ provisioning_token, android_id, model, os_version, app_version }` |
+| Provision response | `{ device_id, device_token, config: { ... } }` | `{ message, device_id, device_token }` |
 
-## What needs to happen
+## Changes
 
-### Backend side (your team)
-Ensure your backend responds to `OPTIONS /api/device/provision` with:
-```
-Access-Control-Allow-Origin: *
-Access-Control-Allow-Methods: POST, OPTIONS
-Access-Control-Allow-Headers: Content-Type, Authorization
-```
-This is the real fix. Most frameworks have a CORS middleware for this.
+### 1. `src/data/remote/api-types.ts` -- Fix request/response types
 
-### App side (what we change)
+- **ProvisionRequest**: Change from nested `device_fingerprint` object to flat fields matching the backend:
+  ```
+  provisioning_token, android_id, model, os_version, app_version
+  ```
+- **ProvisionResponse**: Change to match actual response:
+  ```
+  message, device_id, device_token
+  ```
+- Remove the `DeviceFingerprint` interface (no longer needed as a separate type)
 
-**1. `src/data/remote/api-client.ts`** -- Add the full URL to error logs and improve error reporting so you can see exactly what URL was called and what failed:
+### 2. `src/data/remote/api-client.ts` -- Fix endpoint paths
 
-- Log the full URL (not just the path) before each request
-- Include the full URL in error messages so it shows in the UI
-- Catch network/CORS errors (which throw `TypeError`) separately from HTTP errors
+- Provision: `/api/device/provision` changes to `/api/v1/handheld/provision`
+- Heartbeat: `/api/device/heartbeat` changes to `/api/v1/handheld/heartbeat`
+- Add `Accept: application/json` header to all requests (matching Postman collection)
 
-**2. `src/pages/ProvisioningScreen.tsx`** -- Show the full URL in the error display during provisioning failures so you can immediately verify the URL is correct without needing logs:
+### 3. `src/pages/ProvisioningScreen.tsx` -- Fix provisioning call
 
-- When a provisioning error occurs, display the backend URL that was attempted below the error message
-- This helps quickly confirm whether the QR data was parsed correctly
+- Instead of collecting a full `DeviceFingerprint` object, collect the individual fields (`android_id`, `model`, `os_version`, `app_version`) and send them flat in the request body
+- Handle the simpler response (no `config` object in the provisioning response -- config may come from a separate call or not at all initially)
 
-## Technical Details
+### 4. `src/security/device-fingerprint.ts` -- Simplify to return flat fields
 
-In `api-client.ts`, the `request` method change:
+- Update the function to return the 4 flat fields the backend needs: `android_id`, `model`, `os_version`, `app_version`
+- Remove `manufacturer` and `app_signature_hash` which the backend doesn't use
 
-```
-// Current: only logs path
-logger.info(`API ${options.method || 'GET'} ${path}`);
+### 5. `src/contexts/DeviceContext.tsx` -- Fix completeProvisioning
 
-// New: logs full URL
-logger.info(`API ${options.method || 'GET'} ${url}`);
-```
+- The `completeProvisioning` function currently expects a `config` parameter from the provision response, but the backend doesn't return config during provisioning
+- Update to work without config on initial provisioning (config can be fetched separately later)
 
-Also wrap `fetch` in a try/catch to distinguish CORS/network errors from HTTP errors:
-```
-try {
-  const response = await fetch(url, { ...options, headers });
-} catch (networkErr) {
-  // CORS or network failure — fetch throws TypeError
-  throw new ApiError(
-    `Network error calling ${url} — possible CORS issue`,
-    0,
-    String(networkErr)
-  );
-}
-```
-
-In `ProvisioningScreen.tsx`, show the attempted URL in the error block:
-```
-{error && (
-  <div className="...">
-    <span>{error}</span>
-    {apiClient.getBaseUrl() && (
-      <span className="text-xs opacity-70 mt-1 block">
-        Backend: {apiClient.getBaseUrl()}
-      </span>
-    )}
-  </div>
-)}
-```
-
-## Files Changed
-
-| File | Change |
-|------|--------|
-| `src/data/remote/api-client.ts` | Log full URL, catch network/CORS errors separately |
-| `src/pages/ProvisioningScreen.tsx` | Show backend URL in error display |
+## After This Fix
+- QR scan will extract `backend_url` and `provisioning_token`
+- App will POST to `{backend_url}/api/v1/handheld/provision` with the correct flat body
+- App will save the returned `device_token` and `device_id` for all future authenticated API calls
+- All subsequent API calls (heartbeat, etc.) will use `Authorization: Device {token}` header with the correct paths
 
