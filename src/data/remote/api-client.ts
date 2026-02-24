@@ -123,10 +123,11 @@ class ApiClient {
   }
 
   async fetchLanes(): Promise<Lane[]> {
-    return this.request<Lane[]>(
+    const raw = await this.request<Lane[] | { data: Lane[] }>(
       '/api/v1/handheld/lanes',
       { method: 'GET' }
     );
+    return Array.isArray(raw) ? raw : (raw as any).data || [];
   }
 
   async submitReadsBatch(req: BatchReadRequest): Promise<BatchReadResponse> {

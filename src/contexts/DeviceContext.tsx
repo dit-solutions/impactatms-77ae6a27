@@ -115,9 +115,10 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
   const fetchLanes = useCallback(async () => {
     try {
       const result = await apiClient.fetchLanes();
-      setLanes(result);
-      localStorage.setItem(LANES_KEY, JSON.stringify(result));
-      logger.info(`Fetched ${result.length} lanes`);
+      const normalized = result.map(l => ({ ...l, id: String(l.id) }));
+      setLanes(normalized);
+      localStorage.setItem(LANES_KEY, JSON.stringify(normalized));
+      logger.info(`Fetched ${normalized.length} lanes`);
     } catch (err) {
       logger.warn(`Failed to fetch lanes: ${err}`);
     }
@@ -197,7 +198,7 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
   const updateConfig = useCallback((newConfig: DeviceConfigResponse) => {
     setConfig(newConfig);
     localStorage.setItem('device_config', JSON.stringify(newConfig));
-    logger.info(`Config updated — Plaza: ${newConfig.plaza.name}`);
+    logger.info(`Config updated — Plaza: ${newConfig?.plaza?.name ?? 'unknown'}`);
   }, []);
 
   const value: DeviceContextType = {

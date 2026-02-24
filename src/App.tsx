@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import { DeviceProvider } from "@/contexts/DeviceContext";
 import { DeviceRouter } from "@/components/device/DeviceRouter";
+import { ErrorBoundary } from "@/components/device/ErrorBoundary";
 
 const queryClient = new QueryClient();
 
@@ -15,7 +16,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <DeviceProvider>
-          <DeviceRouter />
+          <ErrorBoundary>
+            <DeviceRouter />
+          </ErrorBoundary>
         </DeviceProvider>
       </BrowserRouter>
     </TooltipProvider>
