@@ -33,6 +33,7 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
   private triggerPressedListeners: TriggerListenerCallback[] = [];
   private triggerReleasedListeners: TriggerListenerCallback[] = [];
   private triggerScanResultListeners: TriggerScanResultCallback[] = [];
+  private keyEventListeners: KeyEventCallback[] = [];
   private scanInterval: ReturnType<typeof setInterval> | null = null;
 
   // Mock FASTag data with realistic TID, EPC, and User data

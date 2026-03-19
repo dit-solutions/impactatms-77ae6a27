@@ -247,6 +247,14 @@ export interface MivantaRfidPlugin {
   ): Promise<{ remove: () => void }>;
   
   /**
+   * Add listener for any physical key event (for debugging keycodes)
+   */
+  addListener(
+    eventName: 'keyEvent',
+    listenerFunc: (data: KeyEventData) => void
+  ): Promise<{ remove: () => void }>;
+  
+  /**
    * Remove all listeners
    */
   removeAllListeners(): Promise<void>;
