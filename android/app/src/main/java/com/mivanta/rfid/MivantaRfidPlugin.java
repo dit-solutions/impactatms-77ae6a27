@@ -130,19 +130,23 @@ public class MivantaRfidPlugin extends Plugin {
      * This is called from MainActivity
      */
     public boolean handleKeyDown(int keyCode, KeyEvent event) {
-        Log.d(TAG, "KEY_EVENT down: keyCode=" + keyCode + " (connected=" + isConnected + ", mode=" + currentMode + ")");
-        
-        // Track every keycode for debug panel
+        // Track every keycode for debug panel (in-memory only, no bridge call)
         lastKeyCode = keyCode;
         
-        // Emit keyEvent for ALL physical keys (so debug panel can show them)
-        JSObject keyEventData = new JSObject();
-        keyEventData.put("keyCode", keyCode);
-        keyEventData.put("action", "down");
-        keyEventData.put("isMainTrigger", isMainTriggerKey(keyCode));
-        keyEventData.put("isSideButton", isSideButton(keyCode));
-        keyEventData.put("timestamp", System.currentTimeMillis());
-        notifyListeners("keyEvent", keyEventData);
+        boolean isRelevantKey = isMainTriggerKey(keyCode) || isSideButton(keyCode);
+        
+        // Only emit keyEvent for trigger/side buttons (not volume, back, nav, etc.)
+        if (isRelevantKey) {
+            Log.d(TAG, "KEY_EVENT down: keyCode=" + keyCode + " (connected=" + isConnected + ", mode=" + currentMode + ")");
+            
+            JSObject keyEventData = new JSObject();
+            keyEventData.put("keyCode", keyCode);
+            keyEventData.put("action", "down");
+            keyEventData.put("isMainTrigger", isMainTriggerKey(keyCode));
+            keyEventData.put("isSideButton", isSideButton(keyCode));
+            keyEventData.put("timestamp", System.currentTimeMillis());
+            notifyListeners("keyEvent", keyEventData);
+        }
         
         // Only main gun trigger initiates scan
         if (isMainTriggerKey(keyCode) && isConnected) {
@@ -159,9 +163,8 @@ public class MivantaRfidPlugin extends Plugin {
             return true;
         }
         
-        // Side buttons (520, 521) — pass through to Android default behavior
+        // Side buttons — pass through to Android default behavior
         if (isSideButton(keyCode)) {
-            Log.d(TAG, "Side button pressed (keyCode=" + keyCode + ") - passing through");
             return false;
         }
         
@@ -169,9 +172,8 @@ public class MivantaRfidPlugin extends Plugin {
     }
     
     public boolean handleKeyUp(int keyCode, KeyEvent event) {
-        Log.d(TAG, "KEY_EVENT up: keyCode=" + keyCode);
-        
         if (isMainTriggerKey(keyCode) && isConnected) {
+            Log.d(TAG, "KEY_EVENT up: keyCode=" + keyCode);
             JSObject data = new JSObject();
             data.put("action", "trigger_released");
             data.put("mode", currentMode);
