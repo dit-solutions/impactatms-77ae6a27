@@ -209,6 +209,12 @@ export interface MivantaRfidPlugin {
   getDebugInfo(): Promise<DebugInfoResult>;
   
   /**
+   * Set which keycodes are treated as the main gun trigger
+   * @param options Comma-separated keycode integers
+   */
+  setTriggerKeyCodes(options: { keyCodes: string }): Promise<TriggerKeyCodesResult>;
+  
+  /**
    * Add listener for tag detection events
    */
   addListener(

@@ -373,6 +373,15 @@ public class MivantaRfidPlugin extends Plugin {
         response.put("nativeLibsLoaded", nativeLibsLoaded);
         response.put("isConnected", isConnected);
         response.put("currentMode", currentMode);
+        response.put("lastKeyCode", lastKeyCode);
+        
+        // Build trigger keycodes string
+        StringBuilder triggerCodes = new StringBuilder();
+        for (int i = 0; i < mainTriggerKeyCodes.length; i++) {
+            if (i > 0) triggerCodes.append(", ");
+            triggerCodes.append(mainTriggerKeyCodes[i]);
+        }
+        response.put("triggerKeyCodes", triggerCodes.toString());
         
         StringBuilder methodsList = new StringBuilder();
         
