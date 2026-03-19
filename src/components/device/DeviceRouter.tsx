@@ -2,7 +2,7 @@
  * DeviceRouter — handles navigation based on device state + Android back button.
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useDevice } from '@/contexts/DeviceContext';
 import { heartbeatWorker } from '@/workers/heartbeat-worker';
 import { syncWorker } from '@/workers/sync-worker';
