@@ -18,6 +18,7 @@ import type {
 type TagListenerCallback = (data: RfidTagData) => void;
 type TriggerListenerCallback = (data: TriggerEventData) => void;
 type TriggerScanResultCallback = (data: TriggerScanResult) => void;
+type KeyEventCallback = (data: KeyEventData) => void;
 
 /**
  * Web mock implementation for development/testing
