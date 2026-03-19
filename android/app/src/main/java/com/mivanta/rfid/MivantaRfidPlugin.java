@@ -341,6 +341,32 @@ public class MivantaRfidPlugin extends Plugin {
     }
     
     @PluginMethod
+    public void setTriggerKeyCodes(PluginCall call) {
+        String codesStr = call.getString("keyCodes", "");
+        if (codesStr == null || codesStr.isEmpty()) {
+            call.reject("keyCodes parameter required (comma-separated integers)");
+            return;
+        }
+        
+        try {
+            String[] parts = codesStr.split(",");
+            int[] newCodes = new int[parts.length];
+            for (int i = 0; i < parts.length; i++) {
+                newCodes[i] = Integer.parseInt(parts[i].trim());
+            }
+            mainTriggerKeyCodes = newCodes;
+            
+            JSObject response = new JSObject();
+            response.put("keyCodes", codesStr);
+            response.put("message", "Trigger keycodes updated to: " + codesStr);
+            call.resolve(response);
+            Log.d(TAG, "Trigger keycodes updated: " + codesStr);
+        } catch (NumberFormatException e) {
+            call.reject("Invalid keyCodes format: " + e.getMessage());
+        }
+    }
+    
+    @PluginMethod
     public void getDebugInfo(PluginCall call) {
         JSObject response = new JSObject();
         response.put("sdkAvailable", sdkAvailable);
