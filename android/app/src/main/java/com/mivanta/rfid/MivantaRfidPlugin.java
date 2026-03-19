@@ -35,10 +35,12 @@ public class MivantaRfidPlugin extends Plugin {
     // Default access password
     private static final String DEFAULT_PASSWORD = "00000000";
     
-    // Hardware trigger button key codes (common for handheld scanners)
+    // Hardware trigger button key codes (Mpower 200 / CX 1500)
+    // Main gun trigger keycodes
     private static final int KEYCODE_SCAN_TRIGGER = 280;
     private static final int KEYCODE_SCAN_TRIGGER_ALT = 139;
     private static final int KEYCODE_SCAN_TRIGGER_ALT2 = 293;
+    // Side button keycodes (left/right)
     private static final int KEYCODE_SCAN_LEFT = 520;
     private static final int KEYCODE_SCAN_RIGHT = 521;
     
@@ -52,6 +54,12 @@ public class MivantaRfidPlugin extends Plugin {
     // Track current read mode
     private String currentMode = "single";
     private boolean continuousModeStartedByTrigger = false;
+    
+    // Dynamically configurable gun trigger keycodes
+    private int[] mainTriggerKeyCodes = { KEYCODE_SCAN_TRIGGER, KEYCODE_SCAN_TRIGGER_ALT, KEYCODE_SCAN_TRIGGER_ALT2 };
+    
+    // Track last keycode for debug panel
+    private int lastKeyCode = -1;
 
     private static synchronized void loadNativeLibraries() {
         if (nativeLibsLoaded) {
@@ -122,12 +130,24 @@ public class MivantaRfidPlugin extends Plugin {
      * This is called from MainActivity
      */
     public boolean handleKeyDown(int keyCode, KeyEvent event) {
-        Log.d(TAG, "Key down: " + keyCode + " (connected=" + isConnected + ", mode=" + currentMode + ")");
+        Log.d(TAG, "KEY_EVENT down: keyCode=" + keyCode + " (connected=" + isConnected + ", mode=" + currentMode + ")");
         
-        if (isTriggerKey(keyCode) && isConnected) {
-            Log.d(TAG, "Trigger button pressed - performing scan action");
+        // Track every keycode for debug panel
+        lastKeyCode = keyCode;
+        
+        // Emit keyEvent for ALL physical keys (so debug panel can show them)
+        JSObject keyEventData = new JSObject();
+        keyEventData.put("keyCode", keyCode);
+        keyEventData.put("action", "down");
+        keyEventData.put("isMainTrigger", isMainTriggerKey(keyCode));
+        keyEventData.put("isSideButton", isSideButton(keyCode));
+        keyEventData.put("timestamp", System.currentTimeMillis());
+        notifyListeners("keyEvent", keyEventData);
+        
+        // Only main gun trigger initiates scan
+        if (isMainTriggerKey(keyCode) && isConnected) {
+            Log.d(TAG, "MAIN GUN trigger pressed (keyCode=" + keyCode + ") - performing scan");
             
-            // Notify web app
             JSObject data = new JSObject();
             data.put("action", "trigger_pressed");
             data.put("mode", currentMode);
@@ -135,33 +155,55 @@ public class MivantaRfidPlugin extends Plugin {
             data.put("keyCode", keyCode);
             notifyListeners("triggerPressed", data);
             
-            // Also directly perform scan based on mode
             performTriggerScan();
-            
             return true;
         }
+        
+        // Side buttons (520, 521) — pass through to Android default behavior
+        if (isSideButton(keyCode)) {
+            Log.d(TAG, "Side button pressed (keyCode=" + keyCode + ") - passing through");
+            return false;
+        }
+        
         return false;
     }
     
     public boolean handleKeyUp(int keyCode, KeyEvent event) {
-        Log.d(TAG, "Key up: " + keyCode);
+        Log.d(TAG, "KEY_EVENT up: keyCode=" + keyCode);
         
-        if (isTriggerKey(keyCode) && isConnected) {
+        if (isMainTriggerKey(keyCode) && isConnected) {
             JSObject data = new JSObject();
             data.put("action", "trigger_released");
             data.put("mode", currentMode);
+            data.put("keyCode", keyCode);
             notifyListeners("triggerReleased", data);
             return true;
         }
         return false;
     }
     
+    /**
+     * Check if keycode is the MAIN gun trigger (not side buttons)
+     */
+    private boolean isMainTriggerKey(int keyCode) {
+        for (int code : mainTriggerKeyCodes) {
+            if (keyCode == code) return true;
+        }
+        return false;
+    }
+    
+    /**
+     * Check if keycode is a side button
+     */
+    private boolean isSideButton(int keyCode) {
+        return keyCode == KEYCODE_SCAN_LEFT || keyCode == KEYCODE_SCAN_RIGHT;
+    }
+    
+    /**
+     * Legacy method — matches any trigger key (gun + side)
+     */
     private boolean isTriggerKey(int keyCode) {
-        return keyCode == KEYCODE_SCAN_TRIGGER || 
-               keyCode == KEYCODE_SCAN_TRIGGER_ALT || 
-               keyCode == KEYCODE_SCAN_TRIGGER_ALT2 ||
-               keyCode == KEYCODE_SCAN_LEFT ||
-               keyCode == KEYCODE_SCAN_RIGHT ||
+        return isMainTriggerKey(keyCode) || isSideButton(keyCode) ||
                keyCode == KeyEvent.KEYCODE_F7 ||
                keyCode == KeyEvent.KEYCODE_F8 ||
                keyCode == KeyEvent.KEYCODE_CAMERA ||
@@ -299,12 +341,47 @@ public class MivantaRfidPlugin extends Plugin {
     }
     
     @PluginMethod
+    public void setTriggerKeyCodes(PluginCall call) {
+        String codesStr = call.getString("keyCodes", "");
+        if (codesStr == null || codesStr.isEmpty()) {
+            call.reject("keyCodes parameter required (comma-separated integers)");
+            return;
+        }
+        
+        try {
+            String[] parts = codesStr.split(",");
+            int[] newCodes = new int[parts.length];
+            for (int i = 0; i < parts.length; i++) {
+                newCodes[i] = Integer.parseInt(parts[i].trim());
+            }
+            mainTriggerKeyCodes = newCodes;
+            
+            JSObject response = new JSObject();
+            response.put("keyCodes", codesStr);
+            response.put("message", "Trigger keycodes updated to: " + codesStr);
+            call.resolve(response);
+            Log.d(TAG, "Trigger keycodes updated: " + codesStr);
+        } catch (NumberFormatException e) {
+            call.reject("Invalid keyCodes format: " + e.getMessage());
+        }
+    }
+    
+    @PluginMethod
     public void getDebugInfo(PluginCall call) {
         JSObject response = new JSObject();
         response.put("sdkAvailable", sdkAvailable);
         response.put("nativeLibsLoaded", nativeLibsLoaded);
         response.put("isConnected", isConnected);
         response.put("currentMode", currentMode);
+        response.put("lastKeyCode", lastKeyCode);
+        
+        // Build trigger keycodes string
+        StringBuilder triggerCodes = new StringBuilder();
+        for (int i = 0; i < mainTriggerKeyCodes.length; i++) {
+            if (i > 0) triggerCodes.append(", ");
+            triggerCodes.append(mainTriggerKeyCodes[i]);
+        }
+        response.put("triggerKeyCodes", triggerCodes.toString());
         
         StringBuilder methodsList = new StringBuilder();
         

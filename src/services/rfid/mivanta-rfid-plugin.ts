@@ -126,6 +126,27 @@ export interface DebugInfoResult {
   isConnected: boolean;
   methods: string;
   currentMode?: string;
+  lastKeyCode?: number;
+  triggerKeyCodes?: string;
+}
+
+/**
+ * Key event data from any physical button press
+ */
+export interface KeyEventData {
+  keyCode: number;
+  action: 'down' | 'up';
+  isMainTrigger: boolean;
+  isSideButton: boolean;
+  timestamp: number;
+}
+
+/**
+ * Result of setTriggerKeyCodes
+ */
+export interface TriggerKeyCodesResult {
+  keyCodes: string;
+  message: string;
 }
 
 /**
@@ -188,6 +209,12 @@ export interface MivantaRfidPlugin {
   getDebugInfo(): Promise<DebugInfoResult>;
   
   /**
+   * Set which keycodes are treated as the main gun trigger
+   * @param options Comma-separated keycode integers
+   */
+  setTriggerKeyCodes(options: { keyCodes: string }): Promise<TriggerKeyCodesResult>;
+  
+  /**
    * Add listener for tag detection events
    */
   addListener(
@@ -217,6 +244,14 @@ export interface MivantaRfidPlugin {
   addListener(
     eventName: 'triggerScanResult',
     listenerFunc: (data: TriggerScanResult) => void
+  ): Promise<{ remove: () => void }>;
+  
+  /**
+   * Add listener for any physical key event (for debugging keycodes)
+   */
+  addListener(
+    eventName: 'keyEvent',
+    listenerFunc: (data: KeyEventData) => void
   ): Promise<{ remove: () => void }>;
   
   /**
