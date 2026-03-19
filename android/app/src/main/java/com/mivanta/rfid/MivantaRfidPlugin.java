@@ -35,10 +35,12 @@ public class MivantaRfidPlugin extends Plugin {
     // Default access password
     private static final String DEFAULT_PASSWORD = "00000000";
     
-    // Hardware trigger button key codes (common for handheld scanners)
+    // Hardware trigger button key codes (Mpower 200 / CX 1500)
+    // Main gun trigger keycodes
     private static final int KEYCODE_SCAN_TRIGGER = 280;
     private static final int KEYCODE_SCAN_TRIGGER_ALT = 139;
     private static final int KEYCODE_SCAN_TRIGGER_ALT2 = 293;
+    // Side button keycodes (left/right)
     private static final int KEYCODE_SCAN_LEFT = 520;
     private static final int KEYCODE_SCAN_RIGHT = 521;
     
@@ -52,6 +54,12 @@ public class MivantaRfidPlugin extends Plugin {
     // Track current read mode
     private String currentMode = "single";
     private boolean continuousModeStartedByTrigger = false;
+    
+    // Dynamically configurable gun trigger keycodes
+    private int[] mainTriggerKeyCodes = { KEYCODE_SCAN_TRIGGER, KEYCODE_SCAN_TRIGGER_ALT, KEYCODE_SCAN_TRIGGER_ALT2 };
+    
+    // Track last keycode for debug panel
+    private int lastKeyCode = -1;
 
     private static synchronized void loadNativeLibraries() {
         if (nativeLibsLoaded) {
