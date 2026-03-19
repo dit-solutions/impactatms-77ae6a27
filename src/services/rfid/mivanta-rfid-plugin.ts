@@ -126,6 +126,27 @@ export interface DebugInfoResult {
   isConnected: boolean;
   methods: string;
   currentMode?: string;
+  lastKeyCode?: number;
+  triggerKeyCodes?: string;
+}
+
+/**
+ * Key event data from any physical button press
+ */
+export interface KeyEventData {
+  keyCode: number;
+  action: 'down' | 'up';
+  isMainTrigger: boolean;
+  isSideButton: boolean;
+  timestamp: number;
+}
+
+/**
+ * Result of setTriggerKeyCodes
+ */
+export interface TriggerKeyCodesResult {
+  keyCodes: string;
+  message: string;
 }
 
 /**
