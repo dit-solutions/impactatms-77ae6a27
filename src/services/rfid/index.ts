@@ -7,6 +7,8 @@ export type {
   FastTagData, 
   DebugInfoResult, 
   TriggerEventData,
+  KeyEventData,
+  TriggerKeyCodesResult,
   TriggerScanResult as PluginTriggerScanResult,
   MivantaRfidPlugin,
   ConnectionResult,

@@ -199,22 +199,27 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
       nativeLibsLoaded: true,
       isConnected: this.connected,
       methods: 'Web Mock - No native SDK methods available\n\nThis is a browser simulation. Deploy to a real device to see actual SDK methods.',
-      currentMode: this.mode
+      currentMode: this.mode,
+      lastKeyCode: -1,
+      triggerKeyCodes: '280, 139, 293'
     };
   }
 
+  async setTriggerKeyCodes(options: { keyCodes: string }): Promise<TriggerKeyCodesResult> {
+    console.log('[RFID Mock] Setting trigger keycodes to:', options.keyCodes);
+    return { keyCodes: options.keyCodes, message: `Mock trigger keycodes set to ${options.keyCodes}` };
+  }
+
   async addListener(
-    eventName: 'tagDetected' | 'triggerPressed' | 'triggerReleased' | 'triggerScanResult',
-    listenerFunc: TagListenerCallback | TriggerListenerCallback | TriggerScanResultCallback
+    eventName: 'tagDetected' | 'triggerPressed' | 'triggerReleased' | 'triggerScanResult' | 'keyEvent',
+    listenerFunc: TagListenerCallback | TriggerListenerCallback | TriggerScanResultCallback | KeyEventCallback
   ): Promise<{ remove: () => void }> {
     if (eventName === 'tagDetected') {
       this.tagListeners.push(listenerFunc as TagListenerCallback);
       return {
         remove: () => {
           const index = this.tagListeners.indexOf(listenerFunc as TagListenerCallback);
-          if (index > -1) {
-            this.tagListeners.splice(index, 1);
-          }
+          if (index > -1) this.tagListeners.splice(index, 1);
         }
       };
     } else if (eventName === 'triggerPressed') {
@@ -222,9 +227,7 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
       return {
         remove: () => {
           const index = this.triggerPressedListeners.indexOf(listenerFunc as TriggerListenerCallback);
-          if (index > -1) {
-            this.triggerPressedListeners.splice(index, 1);
-          }
+          if (index > -1) this.triggerPressedListeners.splice(index, 1);
         }
       };
     } else if (eventName === 'triggerReleased') {
@@ -232,9 +235,7 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
       return {
         remove: () => {
           const index = this.triggerReleasedListeners.indexOf(listenerFunc as TriggerListenerCallback);
-          if (index > -1) {
-            this.triggerReleasedListeners.splice(index, 1);
-          }
+          if (index > -1) this.triggerReleasedListeners.splice(index, 1);
         }
       };
     } else if (eventName === 'triggerScanResult') {
@@ -242,9 +243,15 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
       return {
         remove: () => {
           const index = this.triggerScanResultListeners.indexOf(listenerFunc as TriggerScanResultCallback);
-          if (index > -1) {
-            this.triggerScanResultListeners.splice(index, 1);
-          }
+          if (index > -1) this.triggerScanResultListeners.splice(index, 1);
+        }
+      };
+    } else if (eventName === 'keyEvent') {
+      this.keyEventListeners.push(listenerFunc as KeyEventCallback);
+      return {
+        remove: () => {
+          const index = this.keyEventListeners.indexOf(listenerFunc as KeyEventCallback);
+          if (index > -1) this.keyEventListeners.splice(index, 1);
         }
       };
     }
@@ -256,6 +263,7 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
     this.triggerPressedListeners = [];
     this.triggerReleasedListeners = [];
     this.triggerScanResultListeners = [];
+    this.keyEventListeners = [];
   }
 
   private delay(ms: number): Promise<void> {
