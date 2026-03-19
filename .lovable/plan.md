@@ -1,47 +1,52 @@
 
 
-# Fix: Android Hardware Back Button Not Working Inside App
+# Configure Main Gun Button for RFID Scanning
 
-## Root Cause
+## Current State
 
-The back button listener in `DeviceRouter.tsx` has a **stale closure race condition**. It re-registers on every `location.pathname` change, but `App.addListener` returns a Promise. The cleanup (`listener.then(l => l.remove())`) can race with the new listener being added — sometimes the old listener fires with a stale path, or no listener is active during the gap, causing Android's default behavior (exit/minimize app) to take over.
+The trigger button pipeline is **already fully implemented** end-to-end:
+- Java: `handleKeyDown` → `isTriggerKey` → `performTriggerScan` → emits `triggerScanResult`
+- JS: `rfid-service.ts` listens for `triggerScanResult` → `use-rfid-reader.ts` processes and calls `onTagDetected`
 
-## Fix
+However, `isTriggerKey()` currently treats **all** physical buttons (gun + both side buttons) identically, including keycodes 520 (left side) and 521 (right side). The user wants **only the main gun button** to trigger scans.
 
-**File: `src/components/device/DeviceRouter.tsx`**
+## Problem
 
-Use a `useRef` to track the current pathname so the listener is registered **once** and always reads the latest path — no teardown/re-register race:
+Two potential issues:
+1. The main gun trigger's actual keycode may not be in the current list (or may differ from expected 280/139)
+2. Side buttons (520, 521) are triggering scans when they shouldn't
 
-```typescript
-const locationRef = useRef(location.pathname);
-locationRef.current = location.pathname;
+## Changes
 
-useEffect(() => {
-  const listener = App.addListener('backButton', () => {
-    const path = locationRef.current;
-    if (path === '/diagnostics') {
-      navigate('/');
-    } else {
-      App.minimizeApp();
-    }
-  });
+### 1. `MivantaRfidPlugin.java` — Separate gun trigger from side buttons
 
-  return () => {
-    listener.then(l => l.remove());
-  };
-}, [navigate]); // register once, no pathname dep
+- Create `isMainTriggerKey()` that only matches the gun trigger keycodes (280, 139, 293)
+- Keep `isTriggerKey()` as-is for future use but only call `isMainTriggerKey()` from `handleKeyDown`/`handleKeyUp`
+- Add **enhanced keycode logging** on ALL key events (not just recognized ones) so we can identify the exact gun keycode from device logs if it differs
+
+```text
+handleKeyDown:
+  - Log EVERY keycode received (even unrecognized)
+  - Only proceed with scan if isMainTriggerKey(keyCode)
+  - Side buttons (520, 521) are passed through to Android default behavior
 ```
 
-This ensures:
-- Listener is always active (no gap during re-registration)
-- Always reads the current route via ref
-- Cleanup only happens on unmount
-- Back from `/diagnostics` → goes to main screen
-- Back from root screens → minimizes app (standard Android behavior)
+### 2. `MivantaRfidPlugin.java` — Add a `setTriggerKeyCodes` plugin method
 
-## Files Changed
+- Allow the web app to dynamically configure which keycodes are treated as the gun trigger
+- Useful for debugging: if 280 isn't the right code, the user can update it from the diagnostics screen without rebuilding the APK
+
+### 3. `src/components/rfid/RfidDebugPanel.tsx` — Show last keycode pressed
+
+- Display the last physical keycode received in the debug panel so the user can identify which keycode the gun button actually sends
+- Add a listener for a new `keyEvent` notification from the plugin
+
+## File Summary
 
 | File | Change |
 |------|--------|
-| `src/components/device/DeviceRouter.tsx` | Use `useRef` for pathname, register listener once |
+| `MivantaRfidPlugin.java` | Separate gun trigger from side buttons, log all keycodes, add `setTriggerKeyCodes` method |
+| `src/services/rfid/mivanta-rfid-plugin.ts` | Add `setTriggerKeyCodes` and `keyEvent` listener types |
+| `src/services/rfid/rfid-service.ts` | Forward `keyEvent` to callbacks |
+| `src/components/rfid/RfidDebugPanel.tsx` | Show last keycode for debugging |
 
