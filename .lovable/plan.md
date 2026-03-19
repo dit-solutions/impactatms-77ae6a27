@@ -1,37 +1,46 @@
 
 
-# Fix: Remove Redundant Artifact Uploads to Unblock CI
+# Trigger New CI Build
 
-## Why this is safe
+## Context
 
-The APK download flow is: GitHub Release → `version.json` downloadUrl → user installs APK. This path uses `softprops/action-gh-release`, which is **not** being removed. The `upload-artifact` step is a separate, redundant copy that counts against GitHub's Actions artifact storage quota (different from Releases storage).
+The back button fix (DeviceRouter.tsx) and physical trigger gun integration (rfid-service, use-rfid-reader) are **already committed** to the codebase. The GitHub Actions builds failed only at the artifact upload step — the code itself is fine.
+
+## What needs to happen
+
+A small commit to trigger a fresh CI build now that you've cleared the artifact storage. The simplest approach: add the `upload-artifact` steps back with your preferred retention settings, which also serves as the code change that triggers the build.
 
 ## Changes
 
 **File: `.github/workflows/android-build.yml`**
 
-1. **Remove "Upload APK" step** (lines using `actions/upload-artifact@v4` for the APK) — redundant with the GitHub Release
-2. **Remove "Upload build logs on failure" step** — also uses `upload-artifact` and hits the same quota
-3. **Add inline failure logging** instead:
-   ```yaml
-   - name: Print build logs on failure
-     if: failure()
-     run: |
-       echo "=== Build failure logs ==="
-       cat android/app/build/outputs/logs/*.txt 2>/dev/null || true
-       find android/app/build/reports -name "*.html" -exec echo "Report: {}" \; 2>/dev/null || true
-   ```
+Add two steps after the "Rename APK with version" step (before the failure logging step):
 
-## What stays the same
+```yaml
+- name: Upload APK
+  if: success()
+  uses: actions/upload-artifact@v4
+  with:
+    name: ImpactATMS-V${{ env.VERSION }}
+    path: android/app/build/outputs/apk/debug/ImpactATMS-V${{ env.VERSION }}.apk
+    retention-days: 7
 
-- GitHub Release with APK attached — **kept**
-- `version.json` manifest update — **kept**
-- OTA update flow — **unaffected**
-- All APK download links — **still work**
+- name: Upload build logs on failure
+  if: failure()
+  uses: actions/upload-artifact@v4
+  with:
+    name: build-logs-${{ github.run_number }}
+    path: android/**/build/reports/**
+    retention-days: 2
+```
 
-## Files changed
+## Result
+
+- This commit triggers a new build that includes all your previous changes (back button, trigger gun)
+- APK artifacts auto-expire in 7 days to prevent future quota issues
+- Build logs kept for 2 days only
 
 | File | Change |
 |------|--------|
-| `.github/workflows/android-build.yml` | Remove 2 `upload-artifact` steps, add inline log printing |
+| `.github/workflows/android-build.yml` | Re-add upload-artifact steps with 7-day and 2-day retention |
 
