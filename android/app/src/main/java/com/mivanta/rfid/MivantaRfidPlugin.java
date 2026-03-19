@@ -130,12 +130,24 @@ public class MivantaRfidPlugin extends Plugin {
      * This is called from MainActivity
      */
     public boolean handleKeyDown(int keyCode, KeyEvent event) {
-        Log.d(TAG, "Key down: " + keyCode + " (connected=" + isConnected + ", mode=" + currentMode + ")");
+        Log.d(TAG, "KEY_EVENT down: keyCode=" + keyCode + " (connected=" + isConnected + ", mode=" + currentMode + ")");
         
-        if (isTriggerKey(keyCode) && isConnected) {
-            Log.d(TAG, "Trigger button pressed - performing scan action");
+        // Track every keycode for debug panel
+        lastKeyCode = keyCode;
+        
+        // Emit keyEvent for ALL physical keys (so debug panel can show them)
+        JSObject keyEventData = new JSObject();
+        keyEventData.put("keyCode", keyCode);
+        keyEventData.put("action", "down");
+        keyEventData.put("isMainTrigger", isMainTriggerKey(keyCode));
+        keyEventData.put("isSideButton", isSideButton(keyCode));
+        keyEventData.put("timestamp", System.currentTimeMillis());
+        notifyListeners("keyEvent", keyEventData);
+        
+        // Only main gun trigger initiates scan
+        if (isMainTriggerKey(keyCode) && isConnected) {
+            Log.d(TAG, "MAIN GUN trigger pressed (keyCode=" + keyCode + ") - performing scan");
             
-            // Notify web app
             JSObject data = new JSObject();
             data.put("action", "trigger_pressed");
             data.put("mode", currentMode);
@@ -143,33 +155,55 @@ public class MivantaRfidPlugin extends Plugin {
             data.put("keyCode", keyCode);
             notifyListeners("triggerPressed", data);
             
-            // Also directly perform scan based on mode
             performTriggerScan();
-            
             return true;
         }
+        
+        // Side buttons (520, 521) — pass through to Android default behavior
+        if (isSideButton(keyCode)) {
+            Log.d(TAG, "Side button pressed (keyCode=" + keyCode + ") - passing through");
+            return false;
+        }
+        
         return false;
     }
     
     public boolean handleKeyUp(int keyCode, KeyEvent event) {
-        Log.d(TAG, "Key up: " + keyCode);
+        Log.d(TAG, "KEY_EVENT up: keyCode=" + keyCode);
         
-        if (isTriggerKey(keyCode) && isConnected) {
+        if (isMainTriggerKey(keyCode) && isConnected) {
             JSObject data = new JSObject();
             data.put("action", "trigger_released");
             data.put("mode", currentMode);
+            data.put("keyCode", keyCode);
             notifyListeners("triggerReleased", data);
             return true;
         }
         return false;
     }
     
+    /**
+     * Check if keycode is the MAIN gun trigger (not side buttons)
+     */
+    private boolean isMainTriggerKey(int keyCode) {
+        for (int code : mainTriggerKeyCodes) {
+            if (keyCode == code) return true;
+        }
+        return false;
+    }
+    
+    /**
+     * Check if keycode is a side button
+     */
+    private boolean isSideButton(int keyCode) {
+        return keyCode == KEYCODE_SCAN_LEFT || keyCode == KEYCODE_SCAN_RIGHT;
+    }
+    
+    /**
+     * Legacy method — matches any trigger key (gun + side)
+     */
     private boolean isTriggerKey(int keyCode) {
-        return keyCode == KEYCODE_SCAN_TRIGGER || 
-               keyCode == KEYCODE_SCAN_TRIGGER_ALT || 
-               keyCode == KEYCODE_SCAN_TRIGGER_ALT2 ||
-               keyCode == KEYCODE_SCAN_LEFT ||
-               keyCode == KEYCODE_SCAN_RIGHT ||
+        return isMainTriggerKey(keyCode) || isSideButton(keyCode) ||
                keyCode == KeyEvent.KEYCODE_F7 ||
                keyCode == KeyEvent.KEYCODE_F8 ||
                keyCode == KeyEvent.KEYCODE_CAMERA ||
