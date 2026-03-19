@@ -29,15 +29,16 @@ export function DeviceRouter() {
 
   const location = useLocation();
   const navigate = useNavigate();
+  const locationRef = useRef(location.pathname);
+  locationRef.current = location.pathname;
 
-  // Android hardware back button
+  // Android hardware back button — registered once, reads path via ref
   useEffect(() => {
     const listener = App.addListener('backButton', () => {
-      const path = location.pathname;
+      const path = locationRef.current;
       if (path === '/diagnostics') {
         navigate('/');
       } else {
-        // Root screens — minimize instead of closing
         App.minimizeApp();
       }
     });
@@ -45,7 +46,7 @@ export function DeviceRouter() {
     return () => {
       listener.then(l => l.remove());
     };
-  }, [location.pathname, navigate]);
+  }, [navigate]);
 
   // Start/stop workers based on device state
   useEffect(() => {
