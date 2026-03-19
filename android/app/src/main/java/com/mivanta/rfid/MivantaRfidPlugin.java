@@ -172,9 +172,8 @@ public class MivantaRfidPlugin extends Plugin {
     }
     
     public boolean handleKeyUp(int keyCode, KeyEvent event) {
-        Log.d(TAG, "KEY_EVENT up: keyCode=" + keyCode);
-        
         if (isMainTriggerKey(keyCode) && isConnected) {
+            Log.d(TAG, "KEY_EVENT up: keyCode=" + keyCode);
             JSObject data = new JSObject();
             data.put("action", "trigger_released");
             data.put("mode", currentMode);
