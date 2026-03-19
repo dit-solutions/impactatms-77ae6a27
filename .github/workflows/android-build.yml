@@ -79,21 +79,16 @@ jobs:
           echo "APK renamed to ImpactATMS-V${VERSION}.apk"
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
 
-      - name: Upload APK
+      - name: Create GitHub Release with APK
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: softprops/action-gh-release@v2
         with:
-          name: ImpactATMS-V${{ env.VERSION }}
-          path: android/app/build/outputs/apk/debug/ImpactATMS-V${{ env.VERSION }}.apk
-          retention-days: 7
-
-      - name: Upload build logs on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-logs-${{ github.run_number }}
-          path: android/**/build/reports/**
-          retention-days: 2
+          tag_name: v${{ env.VERSION }}
+          name: ImpactATMS V${{ env.VERSION }}
+          files: android/app/build/outputs/apk/debug/ImpactATMS-V${{ env.VERSION }}.apk
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Print build logs on failure
         if: failure()
