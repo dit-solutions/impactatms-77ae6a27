@@ -10,7 +10,9 @@ import type {
   DebugInfoResult,
   ModeResult,
   TriggerEventData,
-  TriggerScanResult
+  TriggerScanResult,
+  KeyEventData,
+  TriggerKeyCodesResult
 } from './mivanta-rfid-plugin';
 
 type TagListenerCallback = (data: RfidTagData) => void;
