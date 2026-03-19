@@ -79,78 +79,9 @@ jobs:
           echo "APK renamed to ImpactATMS-V${VERSION}.apk"
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
 
-      - name: Upload APK
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ImpactATMS-V1.0.${{ github.run_number }}
-          path: android/app/build/outputs/apk/debug/ImpactATMS-V1.0.${{ github.run_number }}.apk
-          retention-days: 30
-
-      - name: Create GitHub Release
-        if: success()
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: ImpactATMS v1.0.${{ github.run_number }}
-          body: |
-            ## ImpactATMS v1.0.${{ github.run_number }}
-            
-            **Build:** ${{ github.run_number }}
-            **Commit:** ${{ github.sha }}
-            **Date:** ${{ github.event.head_commit.timestamp }}
-            
-            ### Installation
-            Download the APK below and install on your device.
-          files: android/app/build/outputs/apk/debug/ImpactATMS-V1.0.${{ github.run_number }}.apk
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Update version manifest
-        if: success()
-        run: |
-          RELEASE_DATE=$(date -u +%Y-%m-%d)
-          echo "{" > public/version.json
-          echo "  \"version\": \"1.0.${{ github.run_number }}\"," >> public/version.json
-          echo "  \"build\": ${{ github.run_number }}," >> public/version.json
-          echo "  \"downloadUrl\": \"https://github.com/${{ github.repository }}/releases/download/v1.0.${{ github.run_number }}/ImpactATMS-V1.0.${{ github.run_number }}.apk\"," >> public/version.json
-          echo "  \"releaseNotes\": \"Build ${{ github.run_number }}\"," >> public/version.json
-          echo "  \"releaseDate\": \"${RELEASE_DATE}\"" >> public/version.json
-          echo "}" >> public/version.json
-          echo "Updated version.json to build ${{ github.run_number }}"
-
-      - name: Commit version manifest
-        if: success()
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Reset all unstaged changes from cap sync / build
-          git checkout -- .
-
-          # Stage only version.json
-          git add public/version.json
-          git diff --cached --quiet && echo "No changes to commit" && exit 0
-
-          git commit -m "chore: update version manifest to v1.0.${{ github.run_number }}"
-
-          # Retry push up to 3 times (handles race with Lovable commits)
-          for i in 1 2 3; do
-            git pull --rebase origin main && git push origin main && exit 0
-            echo "Push attempt $i failed, retrying..."
-            sleep 2
-          done
-          echo "WARNING: Could not push version.json after 3 attempts (non-fatal)"
-
-      - name: Upload build logs on failure
+      - name: Print build logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gradle-build-logs
-          path: |
-            android/app/build/reports/
-            android/app/build/outputs/logs/
-            android/.gradle/
-          retention-days: 7
+        run: |
+          echo "=== Build failure logs ==="
+          cat android/app/build/outputs/logs/*.txt 2>/dev/null || true
+          find android/app/build/reports -name "*.html" -exec echo "Report: {}" \; 2>/dev/null || true
