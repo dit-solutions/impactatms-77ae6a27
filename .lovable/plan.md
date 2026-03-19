@@ -1,46 +1,39 @@
 
 
-# Trigger New CI Build
+# Remove Artifact Uploads, Use GitHub Release for APK
 
-## Context
+## Problem
+GitHub Actions artifact storage is full (0.5 GB / 0.5 GB) and not refreshing, blocking builds.
 
-The back button fix (DeviceRouter.tsx) and physical trigger gun integration (rfid-service, use-rfid-reader) are **already committed** to the codebase. The GitHub Actions builds failed only at the artifact upload step — the code itself is fine.
+## Solution
+- Remove both `upload-artifact` steps (APK and failure logs)
+- Replace APK upload with a **GitHub Release** — this uses a different storage quota (Git LFS / Releases, not Actions artifacts), so the APK will still be downloadable
+- Keep the existing "Print build logs on failure" step for inline logs in the workflow console
 
-## What needs to happen
+## Changes to `.github/workflows/android-build.yml`
 
-A small commit to trigger a fresh CI build now that you've cleared the artifact storage. The simplest approach: add the `upload-artifact` steps back with your preferred retention settings, which also serves as the code change that triggers the build.
+**Remove** lines 82-96 (both `upload-artifact` steps).
 
-## Changes
-
-**File: `.github/workflows/android-build.yml`**
-
-Add two steps after the "Rename APK with version" step (before the failure logging step):
+**Replace** with a single GitHub Release step:
 
 ```yaml
-- name: Upload APK
+- name: Create GitHub Release with APK
   if: success()
-  uses: actions/upload-artifact@v4
+  uses: softprops/action-gh-release@v2
   with:
-    name: ImpactATMS-V${{ env.VERSION }}
-    path: android/app/build/outputs/apk/debug/ImpactATMS-V${{ env.VERSION }}.apk
-    retention-days: 7
-
-- name: Upload build logs on failure
-  if: failure()
-  uses: actions/upload-artifact@v4
-  with:
-    name: build-logs-${{ github.run_number }}
-    path: android/**/build/reports/**
-    retention-days: 2
+    tag_name: v${{ env.VERSION }}
+    name: ImpactATMS V${{ env.VERSION }}
+    files: android/app/build/outputs/apk/debug/ImpactATMS-V${{ env.VERSION }}.apk
+    make_latest: true
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-## Result
+This creates a tagged release with the APK attached — downloadable from the repo's Releases page. No artifact storage consumed.
 
-- This commit triggers a new build that includes all your previous changes (back button, trigger gun)
-- APK artifacts auto-expire in 7 days to prevent future quota issues
-- Build logs kept for 2 days only
+The "Print build logs on failure" step (lines 98-103) stays as-is for inline failure diagnostics.
 
 | File | Change |
 |------|--------|
-| `.github/workflows/android-build.yml` | Re-add upload-artifact steps with 7-day and 2-day retention |
+| `.github/workflows/android-build.yml` | Remove upload-artifact steps, add GitHub Release step |
 
