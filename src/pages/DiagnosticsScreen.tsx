@@ -25,6 +25,10 @@ import { toast } from '@/hooks/use-toast';
 import type { PendingRead } from '@/data/local/entities';
 
 const DiagnosticsScreen = () => {
+  const [searchParams] = useSearchParams();
+  const initialTab = ['device', 'reader', 'debug'].includes(searchParams.get('tab') || '') 
+    ? searchParams.get('tab')! 
+    : 'device';
   const { power, mode, isConnected, setPower, setMode, refreshStatus } = useRfidSettings();
   const { deviceId, config, lastHeartbeat, lastSync, pendingCount, resetDevice } = useDevice();
   const [connecting, setConnecting] = useState(false);
