@@ -1,66 +1,65 @@
 
 
-# Fix App Lag Introduced in Recent Builds
+# Fix: Connect Reader Navigation + Back Button Crash
 
-## Root Cause
+## Issue 1: "Connect Reader" Goes to Wrong Tab
 
-The lag was introduced by the **trigger gun integration** changes in `MivantaRfidPlugin.java`. Specifically, lines 138-145 of `handleKeyDown()`:
+**File: `src/components/rfid/RfidReaderPanel.tsx`** (line 86-89)
 
-```java
-// Emit keyEvent for ALL physical keys (so debug panel can show them)
-JSObject keyEventData = new JSObject();
-keyEventData.put("keyCode", keyCode);
-keyEventData.put("action", "down");
-keyEventData.put("isMainTrigger", isMainTriggerKey(keyCode));
-keyEventData.put("isSideButton", isSideButton(keyCode));
-keyEventData.put("timestamp", System.currentTimeMillis());
-notifyListeners("keyEvent", keyEventData);
+Currently links to `/diagnostics` which opens on the "Device" tab. The connect button is on the "Reader" tab.
+
+**Fix**: Link to `/diagnostics?tab=reader` instead.
+
+**File: `src/pages/DiagnosticsScreen.tsx`**
+
+Currently uses `defaultValue="device"` for Tabs. Need to read the `tab` query param and use it as the default/controlled value.
+
+- Read `?tab=` from URL search params
+- Use it as the active tab (defaulting to `"device"` if not specified)
+- Valid values: `device`, `reader`, `debug`
+
+## Issue 2: Back Button Exits App + Crash
+
+**File: `src/components/device/DeviceRouter.tsx`** (lines 37-44)
+
+Current logic:
+```
+if path === '/diagnostics' → navigate('/')
+else → App.minimizeApp()
 ```
 
-**Every single physical key press** on the device (volume up/down, back, navigation, home, etc.) now crosses the Capacitor bridge via `notifyListeners`. On Android handheld devices, system keys fire frequently — this floods the JS bridge with events, creating lag across the entire WebView (button clicks, navigation, rendering).
+This means if the user is on `/diagnostics` with the reader tab open, back works. But if any unexpected path is hit, `minimizeApp()` fires immediately, exiting the app. The crash/ANR likely happens because `App.minimizeApp()` is called while the WebView is still processing, or because the listener fires multiple times.
 
-Before the trigger gun changes, `MainActivity` did not override `onKeyDown`/`onKeyUp` at all, so no key events reached the Capacitor bridge.
+**Fix**:
+- Change logic: only minimize on root paths (`/`, `/setup`, `/login`). For all other paths, navigate to `/`.
+- Wrap in try-catch to prevent ANR from unhandled native errors.
 
-## Fix (1 file change, no core logic affected)
-
-### `MivantaRfidPlugin.java` — Only emit `keyEvent` for trigger and side buttons
-
-Move the `keyEvent` emission inside a guard so it only fires for relevant keys (trigger + side buttons), not every system key:
-
-```java
-public boolean handleKeyDown(int keyCode, KeyEvent event) {
-    lastKeyCode = keyCode;
-
-    // Only emit keyEvent for trigger/side buttons (not volume, back, etc.)
-    if (isMainTriggerKey(keyCode) || isSideButton(keyCode)) {
-        JSObject keyEventData = new JSObject();
-        keyEventData.put("keyCode", keyCode);
-        keyEventData.put("action", "down");
-        keyEventData.put("isMainTrigger", isMainTriggerKey(keyCode));
-        keyEventData.put("isSideButton", isSideButton(keyCode));
-        keyEventData.put("timestamp", System.currentTimeMillis());
-        notifyListeners("keyEvent", keyEventData);
+```typescript
+useEffect(() => {
+  const listener = App.addListener('backButton', () => {
+    try {
+      const path = locationRef.current;
+      if (path === '/' || path === '/setup' || path === '/login') {
+        App.minimizeApp();
+      } else {
+        navigate('/');
+      }
+    } catch (e) {
+      // Prevent ANR
     }
+  });
 
-    // Rest of the method stays exactly the same
-    if (isMainTriggerKey(keyCode) && isConnected) { ... }
-    ...
-}
+  return () => {
+    listener.then(l => l.remove());
+  };
+}, [navigate]);
 ```
 
-Also reduce the verbose `Log.d` on every key press to only log for relevant keys.
+## Files Changed
 
-## What stays untouched
-- All scanning, reading, tag processing logic
-- All data submission and sync worker logic
-- All UI components and routing
-- The back button handler in DeviceRouter
-- The trigger scan flow (triggerPressed, triggerScanResult events)
-
-## Why this is the cause
-- The app was fine before the trigger gun integration
-- That integration added `onKeyDown`/`onKeyUp` overrides in `MainActivity` which route **every** key to the plugin
-- The plugin then fires a Capacitor bridge event for **every** key
-- Capacitor bridge calls are not free — each one serializes a JSObject, crosses the WebView bridge, and triggers JS event handlers
-- Volume keys, back key, and other system keys fire constantly during normal device use
+| File | Change |
+|------|--------|
+| `src/components/rfid/RfidReaderPanel.tsx` | Link to `/diagnostics?tab=reader` |
+| `src/pages/DiagnosticsScreen.tsx` | Read `?tab=` param to set active tab |
+| `src/components/device/DeviceRouter.tsx` | Invert back button logic: minimize only on root paths, navigate home otherwise |
 
