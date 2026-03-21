@@ -35,11 +35,15 @@ export function DeviceRouter() {
   // Android hardware back button — registered once, reads path via ref
   useEffect(() => {
     const listener = App.addListener('backButton', () => {
-      const path = locationRef.current;
-      if (path === '/diagnostics') {
-        navigate('/');
-      } else {
-        App.minimizeApp();
+      try {
+        const path = locationRef.current;
+        if (path === '/' || path === '/setup' || path === '/login') {
+          App.minimizeApp();
+        } else {
+          navigate('/');
+        }
+      } catch (e) {
+        // Prevent ANR from unhandled native errors
       }
     });
 

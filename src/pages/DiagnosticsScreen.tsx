@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +25,10 @@ import { toast } from '@/hooks/use-toast';
 import type { PendingRead } from '@/data/local/entities';
 
 const DiagnosticsScreen = () => {
+  const [searchParams] = useSearchParams();
+  const initialTab = ['device', 'reader', 'debug'].includes(searchParams.get('tab') || '') 
+    ? searchParams.get('tab')! 
+    : 'device';
   const { power, mode, isConnected, setPower, setMode, refreshStatus } = useRfidSettings();
   const { deviceId, config, lastHeartbeat, lastSync, pendingCount, resetDevice } = useDevice();
   const [connecting, setConnecting] = useState(false);
@@ -118,7 +122,7 @@ const DiagnosticsScreen = () => {
           </div>
         </header>
 
-        <Tabs defaultValue="device" className="w-full">
+        <Tabs defaultValue={initialTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-4">
             <TabsTrigger value="device">
               <Activity className="h-4 w-4 mr-1" />
