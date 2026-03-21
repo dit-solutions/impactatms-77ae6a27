@@ -118,7 +118,7 @@ const DiagnosticsScreen = () => {
           </div>
         </header>
 
-        <Tabs defaultValue="device" className="w-full">
+        <Tabs defaultValue={initialTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-4">
             <TabsTrigger value="device">
               <Activity className="h-4 w-4 mr-1" />
