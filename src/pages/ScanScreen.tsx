@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Settings, WifiOff, LogOut } from 'lucide-react';
+import { Settings, WifiOff } from 'lucide-react';
 import { RfidReaderPanel } from '@/components/rfid';
 import { useDevice } from '@/contexts/DeviceContext';
 import { useReadCapture } from '@/domain/use-cases/submit-read';
@@ -10,7 +10,7 @@ import type { RfidTagData } from '@/services/rfid';
 import logoLight from '@/assets/logo-light.png';
 
 const ScanScreen = () => {
-  const { config, isOnline, lanes, selectedLane, setSelectedLane, logout, currentUser } = useDevice();
+  const { config, isOnline, lanes, selectedLane, setSelectedLane } = useDevice();
   const { captureRead, lastResult } = useReadCapture();
 
   const handleTagDetected = useCallback(async (tag: RfidTagData) => {
@@ -49,9 +49,6 @@ const ScanScreen = () => {
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" onClick={logout} title="Logout">
-                <LogOut className="h-5 w-5" />
-              </Button>
               <Button variant="ghost" size="icon" asChild>
                 <Link to="/diagnostics">
                   <Settings className="h-5 w-5" />

@@ -9,8 +9,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   ArrowLeft, Settings as SettingsIcon, Zap, Repeat, Power, PowerOff,
   Bug, Wifi, WifiOff, Activity, Download, RotateCcw,
-  Loader2, Trash2, Clock
+  Loader2, Trash2, Clock, LogOut
 } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
+} from '@/components/ui/alert-dialog';
 import { RfidModeSwitch } from '@/components/rfid/RfidModeSwitch';
 import { RfidPowerSlider } from '@/components/rfid/RfidPowerSlider';
 import { RfidDebugPanel } from '@/components/rfid/RfidDebugPanel';
@@ -30,7 +34,7 @@ const DiagnosticsScreen = () => {
     ? searchParams.get('tab')! 
     : 'device';
   const { power, mode, isConnected, setPower, setMode, refreshStatus } = useRfidSettings();
-  const { deviceId, config, lastHeartbeat, lastSync, pendingCount, resetDevice } = useDevice();
+  const { deviceId, config, lastHeartbeat, lastSync, pendingCount, resetDevice, logout } = useDevice();
   const [connecting, setConnecting] = useState(false);
   const [testing, setTesting] = useState(false);
   const [recentReads, setRecentReads] = useState<PendingRead[]>([]);
@@ -178,6 +182,38 @@ const DiagnosticsScreen = () => {
                 <div className="flex justify-center pt-2">
                   <AppVersionBadge />
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Danger Zone */}
+            <Card className="border-destructive/30">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base text-destructive">Danger Zone</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" className="w-full justify-start">
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sign Out
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Are you sure you want to sign out?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        You will need to sign in again to access the scanner.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={logout}>Sign Out</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Signs you out of the current session.
+                </p>
               </CardContent>
             </Card>
           </TabsContent>
