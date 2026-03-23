@@ -1,25 +1,25 @@
 
 
-# Fix Debug Tab Freeze + Limit to Last 20 Scans
+# Fix: Error Message Overflow on Provisioning Screen
 
 ## Problem
-`getRecentReads(30)` does a full table scan on every Debug tab click, causing ANR crashes. Multiple clicks queue multiple scans.
+API error messages (often containing long URLs or JSON) render as a single unbroken line, overflowing the card horizontally.
 
-## Changes
+## Fix
 
-### 1. `src/data/local/database.ts` — Add limit to `getRecentReads()`
-- Add `limit` parameter (default 20)
-- Stop cursor iteration once limit is reached
-- Still sort by newest first
+### `src/pages/ProvisioningScreen.tsx` (lines 176-187)
+Add `overflow-hidden` and `break-words` to the error container so long text wraps within the card:
 
-### 2. `src/pages/DiagnosticsScreen.tsx`
-- Remove `onClick={loadRecentReads}` from Debug tab trigger
-- Add a manual "Load Recent Scans" button inside the Debug tab content
-- Call `getRecentReads(30, 20)` — last 30 days, max 20 records
-- Update heading to say "Last 20 Scans" instead of "Last 30 Days"
+```tsx
+<div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm overflow-hidden">
+  <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+  <div className="min-w-0 break-all">
+```
+
+Also apply the same fix to the LoginScreen error block (line 91-94) for consistency.
 
 | File | Change |
 |------|--------|
-| `database.ts` | Add `limit` param to `getRecentReads()`, stop at limit |
-| `DiagnosticsScreen.tsx` | Remove auto-load on tab click, add manual load button, limit to 20 |
+| `ProvisioningScreen.tsx` | Add `overflow-hidden` to error container, `min-w-0 break-all` to text div |
+| `LoginScreen.tsx` | Same overflow fix on error block |
 
