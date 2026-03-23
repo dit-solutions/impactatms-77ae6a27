@@ -97,27 +97,26 @@ class AppDatabase {
     });
   }
 
-  /** Get all reads from the last N days, newest first */
-  async getRecentReads(days: number): Promise<PendingRead[]> {
+  /** Get recent reads, newest first, with limit */
+  async getRecentReads(days: number, limit = 20): Promise<PendingRead[]> {
     const db = await this.open();
     const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
 
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
-      const req = store.openCursor();
+      const req = store.openCursor(null, 'prev');
       const results: PendingRead[] = [];
 
       req.onsuccess = () => {
         const cursor = req.result;
-        if (cursor) {
+        if (cursor && results.length < limit) {
           const record = cursor.value as PendingRead;
           if (record.createdAt >= cutoff) {
             results.push(record);
           }
           cursor.continue();
         } else {
-          results.sort((a, b) => b.createdAt - a.createdAt);
           resolve(results);
         }
       };

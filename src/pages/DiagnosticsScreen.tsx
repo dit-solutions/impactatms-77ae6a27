@@ -87,7 +87,7 @@ const DiagnosticsScreen = () => {
   const loadRecentReads = async () => {
     setLoadingReads(true);
     try {
-      const reads = await db.getRecentReads(30);
+      const reads = await db.getRecentReads(30, 20);
       setRecentReads(reads);
     } catch (err) {
       logger.warn(`Failed to load recent reads: ${err}`);
@@ -136,7 +136,7 @@ const DiagnosticsScreen = () => {
               <SettingsIcon className="h-4 w-4 mr-1" />
               Reader
             </TabsTrigger>
-            <TabsTrigger value="debug" onClick={loadRecentReads}>
+            <TabsTrigger value="debug">
               <Bug className="h-4 w-4 mr-1" />
               Debug
             </TabsTrigger>
@@ -308,7 +308,7 @@ const DiagnosticsScreen = () => {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Clock className="h-4 w-4" />
-                    Scanned Tags (30 days)
+                    Last 20 Scans
                   </CardTitle>
                   <Button variant="ghost" size="sm" onClick={handleClearOldLogs}>
                     <Trash2 className="h-3 w-3 mr-1" />
@@ -317,12 +317,15 @@ const DiagnosticsScreen = () => {
                 </div>
               </CardHeader>
               <CardContent>
-                {loadingReads ? (
+                {recentReads.length === 0 && !loadingReads ? (
+                  <Button onClick={loadRecentReads} variant="outline" className="w-full">
+                    <Clock className="h-4 w-4 mr-2" />
+                    Load Recent Scans
+                  </Button>
+                ) : loadingReads ? (
                   <div className="flex justify-center py-4">
                     <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                   </div>
-                ) : recentReads.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">No scanned tags yet</p>
                 ) : (
                   <ScrollArea className="h-64">
                     <div className="space-y-2">
