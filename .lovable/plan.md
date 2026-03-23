@@ -1,52 +1,67 @@
 
 
-# Fix: App Lag from Unstable useEffect Dependencies
+# Remove Key Event Listener and Gun Trigger Code
 
-## Root Cause
+## What's being removed
 
-The lag was introduced by the trigger gun integration changes to `use-rfid-reader.ts`. The `useEffect` at line 79 has dependencies `[onTagDetected, handleTriggerScanResult]` that are **unstable** — they change on nearly every re-render, causing the effect to re-run repeatedly. Each re-run:
+The "Last Physical Key Pressed" listener in the debug panel and the gun trigger scan integration — both introduced in recent builds and identified as the source of lag.
 
-1. Calls `rfidService.clearCallbacks()` (cleanup)
-2. Calls `rfidService.setCallbacks(...)` (new setup)
-3. Calls `rfidService.refreshStatus()` → `MivantaRfid.getStatus()` → **crosses the Capacitor bridge**
+## Changes
 
-On a slow handheld device WebView, this bridge-crossing loop creates cumulative lag on every interaction (any state change triggers re-render → effect re-runs → bridge call → more state changes). Rapid taps queue up multiple bridge calls, causing the ANR dialog.
+### 1. `src/components/rfid/RfidDebugPanel.tsx`
+- Remove the `keyEvent` listener `useEffect` (lines 23-34)
+- Remove `lastKeyEvent` state (line 21)
+- Remove the entire "Last Physical Key Pressed" UI block (lines 74-98)
+- Remove `Keyboard` icon import and `KeyEventData` import
 
-**Before the trigger gun changes**, the effect had fewer/more stable dependencies and no `handleTriggerScanResult` callback in the dep array.
+### 2. `src/hooks/use-rfid-reader.ts`
+- Remove `handleTriggerScanResult` callback and its ref (lines 43-83)
+- Remove `onTriggerPressed`, `onTriggerReleased`, `onTriggerScanResult` from `setCallbacks` (lines 102-110)
+- Remove `lastFastTag`, `fastTagHistory` state and all trigger-related state updates
+- Keep the core scanning flow (connect, disconnect, readSingle, readSingleWithDetails, startContinuous, stopContinuous, setPower, setMode, clearHistory) untouched
 
-## Fix — 1 file change
+### 3. `src/services/rfid/rfid-service.ts`
+- Remove `setupTriggerListeners()` method and its call in `connect()`
+- Remove `triggerPressedHandle`, `triggerReleasedHandle`, `triggerScanResultHandle` fields
+- Remove `onTriggerPressed`, `onTriggerReleased`, `onTriggerScanResult` from `RfidServiceCallbacks`
+- Remove `TriggerScanResult` type export
+- Keep all other service methods intact
 
-### `src/hooks/use-rfid-reader.ts`
+### 4. `android/app/src/main/java/com/mivanta/rfid/MivantaRfidPlugin.java`
+- Remove `keyEvent` emission from `handleKeyDown` (lines 139-148)
+- Remove `triggerPressed`/`triggerReleased` event emissions
+- Remove `performTriggerScan()`, `performSingleScanInternal()`, `startContinuousInternal()` methods
+- Remove `handleKeyUp` trigger logic
+- Keep: `handleKeyDown` still tracks `lastKeyCode` for debug info, but emits nothing to JS
+- Keep: all `@PluginMethod` methods (connect, disconnect, readSingle, etc.) untouched
 
-Stabilize the effect by using **refs** for callbacks instead of putting them in the dependency array:
+### 5. `MainActivity.java`
+- Remove `onKeyUp` override entirely (no longer needed)
+- Keep `onKeyDown` override but remove the rfidPlugin delegation (only keep back button handling if present)
+- Actually: since gun trigger is removed, `onKeyDown`/`onKeyUp` can be simplified to not route to rfidPlugin at all. Keep the `onBackPressed` override.
 
-```typescript
-// Store callbacks in refs so the effect doesn't re-run when they change
-const onTagDetectedRef = useRef(onTagDetected);
-onTagDetectedRef.current = onTagDetected;
+### 6. `src/services/rfid/mivanta-rfid-plugin.ts`
+- Remove `TriggerEventData`, `KeyEventData`, `TriggerScanResult` type exports
+- Keep all plugin method interfaces
 
-const handleTriggerScanResultRef = useRef(handleTriggerScanResult);
-handleTriggerScanResultRef.current = handleTriggerScanResult;
-```
-
-Then change the `useEffect` to:
-- Use `onTagDetectedRef.current` and `handleTriggerScanResultRef.current` inside callbacks
-- Remove `onTagDetected` and `handleTriggerScanResult` from the dependency array
-- Make the effect run **once** (empty deps `[]`)
-
-This means `setCallbacks` and `refreshStatus` only run once on mount, not on every re-render. The refs ensure the latest callback versions are always called.
+### 7. `src/services/rfid/index.ts`
+- Remove trigger-related type exports
 
 ## What stays untouched
-
-- All scanning, reading, tag processing logic — unchanged
-- All native Java code — unchanged
-- All data submission, sync workers — unchanged
-- All UI components — unchanged
-- Back button handler — unchanged
-
-## Files Changed
+- All scanning via UI buttons (readSingle, readSingleWithDetails, readTagDetails)
+- Continuous scanning via UI
+- Connection/disconnection flow
+- All data submission and sync
+- Back button handler
+- Debug panel SDK info (Load button still works)
 
 | File | Change |
 |------|--------|
-| `src/hooks/use-rfid-reader.ts` | Stabilize useEffect deps with refs to prevent re-render cascade |
+| `RfidDebugPanel.tsx` | Remove key event listener and UI section |
+| `use-rfid-reader.ts` | Remove trigger scan handling |
+| `rfid-service.ts` | Remove trigger listener setup |
+| `MivantaRfidPlugin.java` | Remove keyEvent/trigger emissions, keep plugin methods |
+| `MainActivity.java` | Remove onKeyDown/onKeyUp rfid delegation |
+| `mivanta-rfid-plugin.ts` | Remove trigger types |
+| `index.ts` | Remove trigger type exports |
 
