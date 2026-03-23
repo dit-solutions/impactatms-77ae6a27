@@ -87,7 +87,7 @@ const DiagnosticsScreen = () => {
   const loadRecentReads = async () => {
     setLoadingReads(true);
     try {
-      const reads = await db.getRecentReads(30);
+      const reads = await db.getRecentReads(30, 20);
       setRecentReads(reads);
     } catch (err) {
       logger.warn(`Failed to load recent reads: ${err}`);
