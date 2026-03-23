@@ -184,6 +184,38 @@ const DiagnosticsScreen = () => {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Danger Zone */}
+            <Card className="border-destructive/30">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base text-destructive">Danger Zone</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" className="w-full justify-start">
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sign Out
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Are you sure you want to sign out?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        You will need to sign in again to access the scanner.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={logout}>Sign Out</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Signs you out of the current session.
+                </p>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Reader Tab */}
