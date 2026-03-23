@@ -37,9 +37,8 @@ export function DeviceRouter() {
     const listener = App.addListener('backButton', () => {
       try {
         const path = locationRef.current;
-        if (path === '/' || path === '/setup' || path === '/login') {
-          App.minimizeApp();
-        } else {
+        // On sub-pages, navigate home; on root pages, do nothing (stay in app)
+        if (path !== '/' && path !== '/setup' && path !== '/login') {
           navigate('/');
         }
       } catch (e) {

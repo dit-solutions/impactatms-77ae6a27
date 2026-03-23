@@ -32,6 +32,14 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
     }
     
+    @SuppressWarnings("deprecation")
+    @Override
+    public void onBackPressed() {
+        // Never call super — prevents exiting the app
+        // Manually trigger the Capacitor backButton JS event
+        getBridge().triggerJSEvent("backButton", "document");
+    }
+    
     @Override
     public void onResume() {
         super.onResume();
