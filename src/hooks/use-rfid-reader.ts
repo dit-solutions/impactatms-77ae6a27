@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { rfidService, RfidTagData, RfidStatus, RfidReadMode, FastTagData, TriggerEventData, TriggerScanResult } from '@/services/rfid';
 import { toast } from '@/hooks/use-toast';
 
@@ -35,6 +35,10 @@ export function useRfidReader(
   const [tagHistory, setTagHistory] = useState<RfidTagData[]>([]);
   const [fastTagHistory, setFastTagHistory] = useState<FastTagData[]>([]);
 
+  // Stable refs for callbacks to prevent useEffect re-runs
+  const onTagDetectedRef = useRef(onTagDetected);
+  onTagDetectedRef.current = onTagDetected;
+
   // Handle trigger scan results from physical button
   const handleTriggerScanResult = useCallback((data: TriggerScanResult) => {
     console.log('Trigger scan result received:', data);
@@ -60,7 +64,7 @@ export function useRfidReader(
       };
       setLastTag(fullTag);
       setTagHistory(prev => [fullTag, ...prev].slice(0, 100));
-      onTagDetected?.(fullTag);
+      onTagDetectedRef.current?.(fullTag);
       
       toast({
         title: 'Tag Scanned',
@@ -73,15 +77,18 @@ export function useRfidReader(
         variant: 'destructive'
       });
     }
-  }, [onTagDetected]);
+  }, []);
 
-  // Set up service callbacks
+  const handleTriggerScanResultRef = useRef(handleTriggerScanResult);
+  handleTriggerScanResultRef.current = handleTriggerScanResult;
+
+  // Set up service callbacks — runs ONCE on mount
   useEffect(() => {
     rfidService.setCallbacks({
       onTagDetected: (tag) => {
         setLastTag(tag);
         setTagHistory(prev => [tag, ...prev].slice(0, 100));
-        onTagDetected?.(tag);
+        onTagDetectedRef.current?.(tag);
       },
       onConnectionChange: setIsConnected,
       onScanningChange: setIsScanning,
@@ -98,7 +105,9 @@ export function useRfidReader(
       onTriggerReleased: (data) => {
         console.log('Trigger released:', data);
       },
-      onTriggerScanResult: handleTriggerScanResult
+      onTriggerScanResult: (data) => {
+        handleTriggerScanResultRef.current(data);
+      }
     });
 
     const syncStatus = async () => {
@@ -112,7 +121,7 @@ export function useRfidReader(
     return () => {
       rfidService.clearCallbacks();
     };
-  }, [onTagDetected, handleTriggerScanResult]);
+  }, []);
 
   const connect = useCallback(async () => {
     const success = await rfidService.connect();
