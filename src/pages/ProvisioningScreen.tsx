@@ -173,9 +173,9 @@ const ProvisioningScreen = () => {
             )}
 
             {error && (
-              <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm overflow-hidden">
                 <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                <div>
+                <div className="min-w-0 break-all">
                   <span>{error}</span>
                   {apiClient.getBaseUrl() && (
                     <span className="text-xs opacity-70 mt-1 block">

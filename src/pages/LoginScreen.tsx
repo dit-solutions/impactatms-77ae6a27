@@ -90,9 +90,9 @@ const LoginScreen = () => {
               </div>
 
               {error && (
-                <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm overflow-hidden">
                   <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                  <span>{error}</span>
+                  <span className="min-w-0 break-all">{error}</span>
                 </div>
               )}
 
