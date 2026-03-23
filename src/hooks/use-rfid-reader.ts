@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { rfidService, RfidTagData, RfidStatus, RfidReadMode, FastTagData, TriggerEventData, TriggerScanResult } from '@/services/rfid';
+import { rfidService, RfidTagData, RfidStatus, RfidReadMode, FastTagData } from '@/services/rfid';
 import { toast } from '@/hooks/use-toast';
 
 interface UseRfidReaderReturn {
@@ -39,49 +39,6 @@ export function useRfidReader(
   const onTagDetectedRef = useRef(onTagDetected);
   onTagDetectedRef.current = onTagDetected;
 
-  // Handle trigger scan results from physical button
-  const handleTriggerScanResult = useCallback((data: TriggerScanResult) => {
-    console.log('Trigger scan result received:', data);
-    
-    if (data.success && data.epc) {
-      const fastTag: FastTagData = {
-        tid: data.tid || '',
-        epc: data.epc,
-        userData: data.userData || '',
-        rssi: data.rssi || 0,
-        timestamp: data.timestamp
-      };
-      
-      setLastFastTag(fastTag);
-      setFastTagHistory(prev => [fastTag, ...prev].slice(0, 100));
-      
-      const fullTag: RfidTagData = {
-        epc: fastTag.epc,
-        rssi: fastTag.rssi,
-        timestamp: fastTag.timestamp,
-        tid: fastTag.tid,
-        userData: fastTag.userData,
-      };
-      setLastTag(fullTag);
-      setTagHistory(prev => [fullTag, ...prev].slice(0, 100));
-      onTagDetectedRef.current?.(fullTag);
-      
-      toast({
-        title: 'Tag Scanned',
-        description: `EPC: ${fastTag.epc.substring(0, 12)}...`
-      });
-    } else {
-      toast({
-        title: 'No Tag',
-        description: 'Hold tag closer',
-        variant: 'destructive'
-      });
-    }
-  }, []);
-
-  const handleTriggerScanResultRef = useRef(handleTriggerScanResult);
-  handleTriggerScanResultRef.current = handleTriggerScanResult;
-
   // Set up service callbacks — runs ONCE on mount
   useEffect(() => {
     rfidService.setCallbacks({
@@ -98,15 +55,6 @@ export function useRfidReader(
           description: error.message,
           variant: 'destructive'
         });
-      },
-      onTriggerPressed: (data) => {
-        console.log('Trigger pressed:', data);
-      },
-      onTriggerReleased: (data) => {
-        console.log('Trigger released:', data);
-      },
-      onTriggerScanResult: (data) => {
-        handleTriggerScanResultRef.current(data);
       }
     });
 
