@@ -34,7 +34,7 @@ const DiagnosticsScreen = () => {
     ? searchParams.get('tab')! 
     : 'device';
   const { power, mode, isConnected, setPower, setMode, refreshStatus } = useRfidSettings();
-  const { deviceId, config, lastHeartbeat, lastSync, pendingCount, resetDevice } = useDevice();
+  const { deviceId, config, lastHeartbeat, lastSync, pendingCount, resetDevice, logout } = useDevice();
   const [connecting, setConnecting] = useState(false);
   const [testing, setTesting] = useState(false);
   const [recentReads, setRecentReads] = useState<PendingRead[]>([]);
