@@ -95,29 +95,6 @@ export interface ModeResult {
 }
 
 /**
- * Trigger event data from hardware button
- */
-export interface TriggerEventData {
-  action: 'trigger_pressed' | 'trigger_released';
-  mode: string;
-  isScanning?: boolean;
-  keyCode?: number;
-}
-
-/**
- * Trigger scan result from physical button scan
- */
-export interface TriggerScanResult {
-  success: boolean;
-  tid?: string;
-  epc?: string;
-  userData?: string;
-  rssi?: number;
-  timestamp: number;
-  message?: string;
-}
-
-/**
  * Debug info result from native SDK
  */
 export interface DebugInfoResult {
@@ -131,138 +108,31 @@ export interface DebugInfoResult {
 }
 
 /**
- * Key event data from any physical button press
- */
-export interface KeyEventData {
-  keyCode: number;
-  action: 'down' | 'up';
-  isMainTrigger: boolean;
-  isSideButton: boolean;
-  timestamp: number;
-}
-
-/**
- * Result of setTriggerKeyCodes
- */
-export interface TriggerKeyCodesResult {
-  keyCodes: string;
-  message: string;
-}
-
-/**
  * Mivanta RFID Plugin Interface
  * Defines the contract between JavaScript and native Android code
  */
 export interface MivantaRfidPlugin {
-  /**
-   * Connect to the UHF RFID module
-   */
   connect(): Promise<ConnectionResult>;
-  
-  /**
-   * Disconnect from the UHF RFID module
-   */
   disconnect(): Promise<ConnectionResult>;
-  
-  /**
-   * Perform a single tag read (button-triggered)
-   */
   readSingle(): Promise<SingleReadResult>;
-  
-  /**
-   * Read complete FASTag data including TID, EPC, and User memory
-   * This performs inventory + reads from TID, EPC, and User memory banks
-   */
   readTagDetails(): Promise<TagDetailsResult>;
-  
-  /**
-   * Start continuous inventory scanning
-   * Listen for 'tagDetected' events for incoming tags
-   */
   startContinuous(): Promise<ScanningResult>;
-  
-  /**
-   * Stop continuous inventory scanning
-   */
   stopContinuous(): Promise<ScanningResult>;
-  
-  /**
-   * Set the reader power level (affects read range)
-   * @param options Power level in dBm (5-33)
-   */
   setPower(options: { power: number }): Promise<PowerResult>;
-  
-  /**
-   * Set the current read mode (for hardware button behavior)
-   * @param options Mode: 'single' or 'continuous'
-   */
   setMode(options: { mode: string }): Promise<ModeResult>;
-  
-  /**
-   * Get current connection and scanning status
-   */
   getStatus(): Promise<RfidStatus>;
-  
-  /**
-   * Get debug information from native SDK (methods, status)
-   */
   getDebugInfo(): Promise<DebugInfoResult>;
-  
-  /**
-   * Set which keycodes are treated as the main gun trigger
-   * @param options Comma-separated keycode integers
-   */
-  setTriggerKeyCodes(options: { keyCodes: string }): Promise<TriggerKeyCodesResult>;
-  
-  /**
-   * Add listener for tag detection events
-   */
+
   addListener(
     eventName: 'tagDetected',
     listenerFunc: (data: RfidTagData) => void
   ): Promise<{ remove: () => void }>;
-  
-  /**
-   * Add listener for hardware trigger button events
-   */
-  addListener(
-    eventName: 'triggerPressed',
-    listenerFunc: (data: TriggerEventData) => void
-  ): Promise<{ remove: () => void }>;
-  
-  /**
-   * Add listener for hardware trigger button release events
-   */
-  addListener(
-    eventName: 'triggerReleased',
-    listenerFunc: (data: TriggerEventData) => void
-  ): Promise<{ remove: () => void }>;
-  
-  /**
-   * Add listener for trigger scan result (from physical button)
-   */
-  addListener(
-    eventName: 'triggerScanResult',
-    listenerFunc: (data: TriggerScanResult) => void
-  ): Promise<{ remove: () => void }>;
-  
-  /**
-   * Add listener for any physical key event (for debugging keycodes)
-   */
-  addListener(
-    eventName: 'keyEvent',
-    listenerFunc: (data: KeyEventData) => void
-  ): Promise<{ remove: () => void }>;
-  
-  /**
-   * Remove all listeners
-   */
+
   removeAllListeners(): Promise<void>;
 }
 
 /**
  * Register the native plugin
- * This connects to the Java MivantaRfidPlugin class
  */
 const MivantaRfid = registerPlugin<MivantaRfidPlugin>('MivantaRfid', {
   web: () => import('./rfid-web-mock').then(m => new m.MivantaRfidWeb()),

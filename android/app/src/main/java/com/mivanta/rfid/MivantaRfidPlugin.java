@@ -35,15 +35,6 @@ public class MivantaRfidPlugin extends Plugin {
     // Default access password
     private static final String DEFAULT_PASSWORD = "00000000";
     
-    // Hardware trigger button key codes (Mpower 200 / CX 1500)
-    // Main gun trigger keycodes
-    private static final int KEYCODE_SCAN_TRIGGER = 280;
-    private static final int KEYCODE_SCAN_TRIGGER_ALT = 139;
-    private static final int KEYCODE_SCAN_TRIGGER_ALT2 = 293;
-    // Side button keycodes (left/right)
-    private static final int KEYCODE_SCAN_LEFT = 520;
-    private static final int KEYCODE_SCAN_RIGHT = 521;
-    
     private UHFReader uhfReader;
     private boolean isConnected = false;
     private boolean isScanning = false;
@@ -53,10 +44,6 @@ public class MivantaRfidPlugin extends Plugin {
     
     // Track current read mode
     private String currentMode = "single";
-    private boolean continuousModeStartedByTrigger = false;
-    
-    // Dynamically configurable gun trigger keycodes
-    private int[] mainTriggerKeyCodes = { KEYCODE_SCAN_TRIGGER, KEYCODE_SCAN_TRIGGER_ALT, KEYCODE_SCAN_TRIGGER_ALT2 };
     
     // Track last keycode for debug panel
     private int lastKeyCode = -1;
@@ -126,198 +113,12 @@ public class MivantaRfidPlugin extends Plugin {
     }
     
     /**
-     * Handle hardware key events (scan trigger button)
-     * This is called from MainActivity
+     * Handle hardware key events — only tracks lastKeyCode for debug info
+     * No bridge calls, no JS emissions
      */
     public boolean handleKeyDown(int keyCode, KeyEvent event) {
-        // Track every keycode for debug panel (in-memory only, no bridge call)
         lastKeyCode = keyCode;
-        
-        boolean isRelevantKey = isMainTriggerKey(keyCode) || isSideButton(keyCode);
-        
-        // Only emit keyEvent for trigger/side buttons (not volume, back, nav, etc.)
-        if (isRelevantKey) {
-            Log.d(TAG, "KEY_EVENT down: keyCode=" + keyCode + " (connected=" + isConnected + ", mode=" + currentMode + ")");
-            
-            JSObject keyEventData = new JSObject();
-            keyEventData.put("keyCode", keyCode);
-            keyEventData.put("action", "down");
-            keyEventData.put("isMainTrigger", isMainTriggerKey(keyCode));
-            keyEventData.put("isSideButton", isSideButton(keyCode));
-            keyEventData.put("timestamp", System.currentTimeMillis());
-            notifyListeners("keyEvent", keyEventData);
-        }
-        
-        // Only main gun trigger initiates scan
-        if (isMainTriggerKey(keyCode) && isConnected) {
-            Log.d(TAG, "MAIN GUN trigger pressed (keyCode=" + keyCode + ") - performing scan");
-            
-            JSObject data = new JSObject();
-            data.put("action", "trigger_pressed");
-            data.put("mode", currentMode);
-            data.put("isScanning", isScanning);
-            data.put("keyCode", keyCode);
-            notifyListeners("triggerPressed", data);
-            
-            performTriggerScan();
-            return true;
-        }
-        
-        // Side buttons — pass through to Android default behavior
-        if (isSideButton(keyCode)) {
-            return false;
-        }
-        
-        return false;
-    }
-    
-    public boolean handleKeyUp(int keyCode, KeyEvent event) {
-        if (isMainTriggerKey(keyCode) && isConnected) {
-            Log.d(TAG, "KEY_EVENT up: keyCode=" + keyCode);
-            JSObject data = new JSObject();
-            data.put("action", "trigger_released");
-            data.put("mode", currentMode);
-            data.put("keyCode", keyCode);
-            notifyListeners("triggerReleased", data);
-            return true;
-        }
-        return false;
-    }
-    
-    /**
-     * Check if keycode is the MAIN gun trigger (not side buttons)
-     */
-    private boolean isMainTriggerKey(int keyCode) {
-        for (int code : mainTriggerKeyCodes) {
-            if (keyCode == code) return true;
-        }
-        return false;
-    }
-    
-    /**
-     * Check if keycode is a side button
-     */
-    private boolean isSideButton(int keyCode) {
-        return keyCode == KEYCODE_SCAN_LEFT || keyCode == KEYCODE_SCAN_RIGHT;
-    }
-    
-    /**
-     * Legacy method — matches any trigger key (gun + side)
-     */
-    private boolean isTriggerKey(int keyCode) {
-        return isMainTriggerKey(keyCode) || isSideButton(keyCode) ||
-               keyCode == KeyEvent.KEYCODE_F7 ||
-               keyCode == KeyEvent.KEYCODE_F8 ||
-               keyCode == KeyEvent.KEYCODE_CAMERA ||
-               keyCode == KeyEvent.KEYCODE_FOCUS;
-    }
-    
-    /**
-     * Perform scan action when physical trigger is pressed
-     */
-    private void performTriggerScan() {
-        if (!isConnected || uhfReader == null) {
-            Log.w(TAG, "Cannot scan - not connected");
-            return;
-        }
-        
-        new Thread(() -> {
-            try {
-                if (currentMode.equals("continuous")) {
-                    // Continuous mode: start scanning if not already
-                    if (!isScanning) {
-                        startContinuousInternal();
-                        continuousModeStartedByTrigger = true;
-                    }
-                } else {
-                    // Single mode: perform single read with details
-                    performSingleScanInternal();
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "Trigger scan error: " + e.getMessage(), e);
-            }
-        }).start();
-    }
-    
-    /**
-     * Internal method to perform single scan and emit result
-     */
-    private void performSingleScanInternal() {
-        try {
-            UHFReaderResult<UHFTagEntity> result = uhfReader.singleTagInventory();
-            
-            if (result != null && result.getData() != null) {
-                UHFTagEntity tag = result.getData();
-                String epc = tag.getEcpHex();
-                int rssi = tag.getRssi();
-                
-                // Try to read all memory banks using direct SDK calls
-                String tid = tryReadMemoryBankDirect(MEMBANK_TID, 0, 6, epc);
-                String userData = tryReadMemoryBankDirect(MEMBANK_USER, 0, 32, epc);
-                
-                if (userData.isEmpty()) {
-                    userData = tryReadMemoryBankDirect(MEMBANK_USER, 0, 16, epc);
-                }
-                
-                // Create FASTag data object
-                JSObject fastTagData = new JSObject();
-                fastTagData.put("success", true);
-                fastTagData.put("tid", tid);
-                fastTagData.put("epc", epc != null ? epc : "");
-                fastTagData.put("userData", userData);
-                fastTagData.put("rssi", rssi);
-                fastTagData.put("timestamp", System.currentTimeMillis());
-                
-                // Notify via trigger-specific event
-                notifyListeners("triggerScanResult", fastTagData);
-                
-                Log.d(TAG, "Trigger scan complete: EPC=" + epc + ", TID=" + tid);
-            } else {
-                JSObject noTag = new JSObject();
-                noTag.put("success", false);
-                noTag.put("message", "No tag detected");
-                noTag.put("timestamp", System.currentTimeMillis());
-                notifyListeners("triggerScanResult", noTag);
-                Log.d(TAG, "Trigger scan: no tag detected");
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "performSingleScanInternal error: " + e.getMessage(), e);
-        }
-    }
-    
-    /**
-     * Internal method to start continuous scanning
-     */
-    private void startContinuousInternal() {
-        try {
-            uhfReader.setOnInventoryDataListener(new OnInventoryDataListener() {
-                @Override
-                public void onInventoryData(List<UHFTagEntity> tags) {
-                    if (tags != null) {
-                        for (UHFTagEntity tag : tags) {
-                            if (tag != null) {
-                                JSObject tagData = new JSObject();
-                                tagData.put("epc", tag.getEcpHex());
-                                tagData.put("rssi", tag.getRssi());
-                                tagData.put("count", tag.getCount());
-                                tagData.put("timestamp", System.currentTimeMillis());
-                                notifyListeners("tagDetected", tagData);
-                            }
-                        }
-                    }
-                }
-            });
-            
-            UHFReaderResult<Boolean> result = uhfReader.startInventory();
-            Boolean started = result.getData();
-            
-            if (started != null && started) {
-                isScanning = true;
-                Log.d(TAG, "Continuous scanning started via trigger");
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "startContinuousInternal error: " + e.getMessage(), e);
-        }
+        return false; // Don't consume any keys
     }
     
     @PluginMethod
@@ -326,7 +127,6 @@ public class MivantaRfidPlugin extends Plugin {
         currentMode = mode;
         Log.d(TAG, "Mode set to: " + mode);
         
-        // If switching to single mode and was scanning, stop
         if (mode.equals("single") && isScanning) {
             try {
                 uhfReader.stopInventory();
@@ -343,32 +143,6 @@ public class MivantaRfidPlugin extends Plugin {
     }
     
     @PluginMethod
-    public void setTriggerKeyCodes(PluginCall call) {
-        String codesStr = call.getString("keyCodes", "");
-        if (codesStr == null || codesStr.isEmpty()) {
-            call.reject("keyCodes parameter required (comma-separated integers)");
-            return;
-        }
-        
-        try {
-            String[] parts = codesStr.split(",");
-            int[] newCodes = new int[parts.length];
-            for (int i = 0; i < parts.length; i++) {
-                newCodes[i] = Integer.parseInt(parts[i].trim());
-            }
-            mainTriggerKeyCodes = newCodes;
-            
-            JSObject response = new JSObject();
-            response.put("keyCodes", codesStr);
-            response.put("message", "Trigger keycodes updated to: " + codesStr);
-            call.resolve(response);
-            Log.d(TAG, "Trigger keycodes updated: " + codesStr);
-        } catch (NumberFormatException e) {
-            call.reject("Invalid keyCodes format: " + e.getMessage());
-        }
-    }
-    
-    @PluginMethod
     public void getDebugInfo(PluginCall call) {
         JSObject response = new JSObject();
         response.put("sdkAvailable", sdkAvailable);
@@ -376,14 +150,6 @@ public class MivantaRfidPlugin extends Plugin {
         response.put("isConnected", isConnected);
         response.put("currentMode", currentMode);
         response.put("lastKeyCode", lastKeyCode);
-        
-        // Build trigger keycodes string
-        StringBuilder triggerCodes = new StringBuilder();
-        for (int i = 0; i < mainTriggerKeyCodes.length; i++) {
-            if (i > 0) triggerCodes.append(", ");
-            triggerCodes.append(mainTriggerKeyCodes[i]);
-        }
-        response.put("triggerKeyCodes", triggerCodes.toString());
         
         StringBuilder methodsList = new StringBuilder();
         
@@ -598,11 +364,9 @@ public class MivantaRfidPlugin extends Plugin {
             
             Log.d(TAG, "readTagDetails: Tag found - EPC: " + epcFromInventory + ", RSSI: " + rssi);
             
-            // Read TID using direct SDK call
             String tid = tryReadMemoryBankDirect(MEMBANK_TID, 0, 6, epcFromInventory);
             Log.d(TAG, "TID read result: '" + tid + "'");
             
-            // Read User data with multiple size attempts
             String userData = tryReadMemoryBankDirect(MEMBANK_USER, 0, 32, epcFromInventory);
             if (userData.isEmpty()) {
                 userData = tryReadMemoryBankDirect(MEMBANK_USER, 0, 16, epcFromInventory);
@@ -686,19 +450,17 @@ public class MivantaRfidPlugin extends Plugin {
     
     /**
      * Read memory bank using direct SDK call matching the manufacturer demo
-     * Uses: uhfReader.read(password, membank, address, wordCount, selectEntity)
      */
     private String tryReadMemoryBankDirect(int memBank, int startAddr, int wordCount, String epc) {
         Log.d(TAG, "tryReadMemoryBankDirect: bank=" + memBank + ", addr=" + startAddr + ", words=" + wordCount + ", epc=" + epc);
         
         try {
-            // First try: Read with no filter (matching demo: read(pwd, bank, addr, count, null))
             UHFReaderResult<String> result = uhfReader.read(
                 DEFAULT_PASSWORD, 
                 memBank, 
                 startAddr, 
                 wordCount, 
-                null  // No filter - read any tag in range
+                null
             );
             
             if (result != null) {
@@ -713,14 +475,13 @@ public class MivantaRfidPlugin extends Plugin {
                 }
             }
             
-            // Second try: If we have EPC, try with SelectEntity filter for specific tag
             if (epc != null && !epc.isEmpty()) {
                 Log.d(TAG, "Trying filtered read with EPC: " + epc);
                 
                 SelectEntity filter = new SelectEntity();
-                filter.setOption(4);  // 4=EPC filter (from demo)
-                filter.setAddress(32);  // EPC starts at bit 32 (word 2)
-                filter.setLength(epc.length() * 4);  // bits = hex chars * 4
+                filter.setOption(4);
+                filter.setAddress(32);
+                filter.setLength(epc.length() * 4);
                 filter.setData(epc);
                 
                 result = uhfReader.read(
@@ -752,9 +513,6 @@ public class MivantaRfidPlugin extends Plugin {
         return "";
     }
     
-    /**
-     * Convert hex string to byte array
-     */
     private byte[] hexToBytes(String hex) {
         if (hex == null || hex.isEmpty()) return new byte[0];
         int len = hex.length();
