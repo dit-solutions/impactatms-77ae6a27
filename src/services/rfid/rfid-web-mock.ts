@@ -8,17 +8,10 @@ import type {
   PowerResult, 
   RfidStatus,
   DebugInfoResult,
-  ModeResult,
-  TriggerEventData,
-  TriggerScanResult,
-  KeyEventData,
-  TriggerKeyCodesResult
+  ModeResult
 } from './mivanta-rfid-plugin';
 
 type TagListenerCallback = (data: RfidTagData) => void;
-type TriggerListenerCallback = (data: TriggerEventData) => void;
-type TriggerScanResultCallback = (data: TriggerScanResult) => void;
-type KeyEventCallback = (data: KeyEventData) => void;
 
 /**
  * Web mock implementation for development/testing
@@ -30,10 +23,6 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
   private power = 30;
   private mode = 'single';
   private tagListeners: TagListenerCallback[] = [];
-  private triggerPressedListeners: TriggerListenerCallback[] = [];
-  private triggerReleasedListeners: TriggerListenerCallback[] = [];
-  private triggerScanResultListeners: TriggerScanResultCallback[] = [];
-  private keyEventListeners: KeyEventCallback[] = [];
   private scanInterval: ReturnType<typeof setInterval> | null = null;
 
   // Mock FASTag data with realistic TID, EPC, and User data
@@ -104,7 +93,7 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
     }
     
     console.log('[RFID Mock] Reading tag details (TID/EPC/User)...');
-    await this.delay(800); // Longer delay for multi-bank read
+    await this.delay(800);
     
     const tag = this.mockFastTags[Math.floor(Math.random() * this.mockFastTags.length)];
     const result: TagDetailsResult = {
@@ -132,7 +121,6 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
     console.log('[RFID Mock] Starting continuous scan...');
     this.scanning = true;
 
-    // Simulate tag reads every 1.5-3 seconds
     this.scanInterval = setInterval(() => {
       if (this.scanning) {
         const tag = this.mockFastTags[Math.floor(Math.random() * this.mockFastTags.length)];
@@ -200,58 +188,20 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
       isConnected: this.connected,
       methods: 'Web Mock - No native SDK methods available\n\nThis is a browser simulation. Deploy to a real device to see actual SDK methods.',
       currentMode: this.mode,
-      lastKeyCode: -1,
-      triggerKeyCodes: '280, 139, 293'
+      lastKeyCode: -1
     };
   }
 
-  async setTriggerKeyCodes(options: { keyCodes: string }): Promise<TriggerKeyCodesResult> {
-    console.log('[RFID Mock] Setting trigger keycodes to:', options.keyCodes);
-    return { keyCodes: options.keyCodes, message: `Mock trigger keycodes set to ${options.keyCodes}` };
-  }
-
   async addListener(
-    eventName: 'tagDetected' | 'triggerPressed' | 'triggerReleased' | 'triggerScanResult' | 'keyEvent',
-    listenerFunc: TagListenerCallback | TriggerListenerCallback | TriggerScanResultCallback | KeyEventCallback
+    eventName: 'tagDetected',
+    listenerFunc: TagListenerCallback
   ): Promise<{ remove: () => void }> {
     if (eventName === 'tagDetected') {
-      this.tagListeners.push(listenerFunc as TagListenerCallback);
+      this.tagListeners.push(listenerFunc);
       return {
         remove: () => {
-          const index = this.tagListeners.indexOf(listenerFunc as TagListenerCallback);
+          const index = this.tagListeners.indexOf(listenerFunc);
           if (index > -1) this.tagListeners.splice(index, 1);
-        }
-      };
-    } else if (eventName === 'triggerPressed') {
-      this.triggerPressedListeners.push(listenerFunc as TriggerListenerCallback);
-      return {
-        remove: () => {
-          const index = this.triggerPressedListeners.indexOf(listenerFunc as TriggerListenerCallback);
-          if (index > -1) this.triggerPressedListeners.splice(index, 1);
-        }
-      };
-    } else if (eventName === 'triggerReleased') {
-      this.triggerReleasedListeners.push(listenerFunc as TriggerListenerCallback);
-      return {
-        remove: () => {
-          const index = this.triggerReleasedListeners.indexOf(listenerFunc as TriggerListenerCallback);
-          if (index > -1) this.triggerReleasedListeners.splice(index, 1);
-        }
-      };
-    } else if (eventName === 'triggerScanResult') {
-      this.triggerScanResultListeners.push(listenerFunc as TriggerScanResultCallback);
-      return {
-        remove: () => {
-          const index = this.triggerScanResultListeners.indexOf(listenerFunc as TriggerScanResultCallback);
-          if (index > -1) this.triggerScanResultListeners.splice(index, 1);
-        }
-      };
-    } else if (eventName === 'keyEvent') {
-      this.keyEventListeners.push(listenerFunc as KeyEventCallback);
-      return {
-        remove: () => {
-          const index = this.keyEventListeners.indexOf(listenerFunc as KeyEventCallback);
-          if (index > -1) this.keyEventListeners.splice(index, 1);
         }
       };
     }
@@ -260,10 +210,6 @@ export class MivantaRfidWeb implements MivantaRfidPlugin {
 
   async removeAllListeners(): Promise<void> {
     this.tagListeners = [];
-    this.triggerPressedListeners = [];
-    this.triggerReleasedListeners = [];
-    this.triggerScanResultListeners = [];
-    this.keyEventListeners = [];
   }
 
   private delay(ms: number): Promise<void> {
