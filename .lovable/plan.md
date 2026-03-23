@@ -1,93 +1,52 @@
 
 
-# Fix: Back Button Exits App from Diagnostics Screen
+# Fix: App Lag from Unstable useEffect Dependencies
 
 ## Root Cause
 
-The `backButton` JS listener in `DeviceRouter.tsx` fires correctly and calls `navigate('/')`, but the **native Android default back behavior also fires simultaneously**. This is a known Capacitor issue — the WebView's default back action (finish activity / go to previous app) runs alongside the JS listener, so the app exits even though JS tried to navigate internally.
+The lag was introduced by the trigger gun integration changes to `use-rfid-reader.ts`. The `useEffect` at line 79 has dependencies `[onTagDetected, handleTriggerScanResult]` that are **unstable** — they change on nearly every re-render, causing the effect to re-run repeatedly. Each re-run:
 
-## Fix
+1. Calls `rfidService.clearCallbacks()` (cleanup)
+2. Calls `rfidService.setCallbacks(...)` (new setup)
+3. Calls `rfidService.refreshStatus()` → `MivantaRfid.getStatus()` → **crosses the Capacitor bridge**
 
-### 1. `MainActivity.java` — Intercept back key in `onKeyDown`
+On a slow handheld device WebView, this bridge-crossing loop creates cumulative lag on every interaction (any state change triggers re-render → effect re-runs → bridge call → more state changes). Rapid taps queue up multiple bridge calls, causing the ANR dialog.
 
-The simplest fix: catch `KEYCODE_BACK` in `onKeyDown` and return `true` (consumed), preventing the native back from firing. The Capacitor bridge still emits its `backButton` event to JS, which handles all navigation logic.
+**Before the trigger gun changes**, the effect had fewer/more stable dependencies and no `handleTriggerScanResult` callback in the dep array.
 
-```java
-@Override
-public boolean onKeyDown(int keyCode, KeyEvent event) {
-    // Intercept back button — let Capacitor JS handle it entirely
-    if (keyCode == KeyEvent.KEYCODE_BACK) {
-        return true; // Consumed — prevents default activity back behavior
-    }
-    if (rfidPlugin != null && rfidPlugin.handleKeyDown(keyCode, event)) {
-        return true;
-    }
-    return super.onKeyDown(keyCode, event);
-}
+## Fix — 1 file change
+
+### `src/hooks/use-rfid-reader.ts`
+
+Stabilize the effect by using **refs** for callbacks instead of putting them in the dependency array:
+
+```typescript
+// Store callbacks in refs so the effect doesn't re-run when they change
+const onTagDetectedRef = useRef(onTagDetected);
+onTagDetectedRef.current = onTagDetected;
+
+const handleTriggerScanResultRef = useRef(handleTriggerScanResult);
+handleTriggerScanResultRef.current = handleTriggerScanResult;
 ```
 
-Wait — this would also prevent the Capacitor `backButton` event from firing since BridgeActivity triggers it via `onBackPressed()`, not `onKeyDown`.
+Then change the `useEffect` to:
+- Use `onTagDetectedRef.current` and `handleTriggerScanResultRef.current` inside callbacks
+- Remove `onTagDetected` and `handleTriggerScanResult` from the dependency array
+- Make the effect run **once** (empty deps `[]`)
 
-**Better approach**: Override `onBackPressed()` directly. When called, manually notify the Capacitor bridge's JS `backButton` listeners, then do NOT call `super.onBackPressed()`:
+This means `setCallbacks` and `refreshStatus` only run once on mount, not on every re-render. The refs ensure the latest callback versions are always called.
 
-```java
-@SuppressWarnings("deprecation")
-@Override
-public void onBackPressed() {
-    // Don't call super — prevents default back (exit/previous app)
-    // Capacitor's BridgeActivity.onBackPressed normally handles this,
-    // but also calls super when no listeners exist, which exits the app.
-    // We always want to stay in the app, so we override completely.
-    
-    // Manually trigger the bridge's backButton event
-    getBridge().triggerJSEvent("backButton", "document");
-}
-```
+## What stays untouched
 
-Actually, the cleanest approach given Capacitor 8's architecture:
-
-### Revised approach — Override `onBackPressed` to never exit
-
-```java
-@SuppressWarnings("deprecation")
-@Override
-public void onBackPressed() {
-    // Let the bridge handle it (fires JS backButton event)
-    // but if bridge would call super (which exits), we prevent that
-    // by not calling super ourselves
-}
-```
-
-But we need the JS event to still fire. Let me check how Capacitor's BridgeActivity handles this...
-
-The safest approach that works with Capacitor 8:
-
-### Final approach
-
-**File: `MainActivity.java`** — Add `onBackPressed` override that calls the bridge's back button handling but never lets the activity finish:
-
-```java
-@SuppressWarnings("deprecation")  
-@Override
-public void onBackPressed() {
-    // Trigger the Capacitor backButton JS event
-    // but never call super.onBackPressed() to prevent exiting the app
-    getBridge().triggerJSEvent("backButton", "document");
-}
-```
-
-### 2. `DeviceRouter.tsx` — Remove `App.minimizeApp()`, always navigate
-
-Since the user wants to **always stay in the app**, update the back button handler:
-- On root paths (`/`, `/setup`, `/login`): do nothing (already on root)
-- On other paths (`/diagnostics`): navigate to `/`
-
-No `minimizeApp()` call at all.
+- All scanning, reading, tag processing logic — unchanged
+- All native Java code — unchanged
+- All data submission, sync workers — unchanged
+- All UI components — unchanged
+- Back button handler — unchanged
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `MainActivity.java` | Override `onBackPressed()` — fire JS event, never call super |
-| `DeviceRouter.tsx` | Remove `App.minimizeApp()`, navigate home or do nothing on root |
+| `src/hooks/use-rfid-reader.ts` | Stabilize useEffect deps with refs to prevent re-render cascade |
 
