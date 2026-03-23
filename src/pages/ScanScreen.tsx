@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Settings, WifiOff, LogOut } from 'lucide-react';
+import { Settings, WifiOff } from 'lucide-react';
 import { RfidReaderPanel } from '@/components/rfid';
 import { useDevice } from '@/contexts/DeviceContext';
 import { useReadCapture } from '@/domain/use-cases/submit-read';
