@@ -10,7 +10,7 @@ import type { RfidTagData } from '@/services/rfid';
 import logoLight from '@/assets/logo-light.png';
 
 const ScanScreen = () => {
-  const { config, isOnline, lanes, selectedLane, setSelectedLane, logout, currentUser } = useDevice();
+  const { config, isOnline, lanes, selectedLane, setSelectedLane } = useDevice();
   const { captureRead, lastResult } = useReadCapture();
 
   const handleTagDetected = useCallback(async (tag: RfidTagData) => {
