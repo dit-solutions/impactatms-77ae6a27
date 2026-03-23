@@ -136,7 +136,7 @@ const DiagnosticsScreen = () => {
               <SettingsIcon className="h-4 w-4 mr-1" />
               Reader
             </TabsTrigger>
-            <TabsTrigger value="debug" onClick={loadRecentReads}>
+            <TabsTrigger value="debug">
               <Bug className="h-4 w-4 mr-1" />
               Debug
             </TabsTrigger>
