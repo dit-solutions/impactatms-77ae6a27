@@ -9,8 +9,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   ArrowLeft, Settings as SettingsIcon, Zap, Repeat, Power, PowerOff,
   Bug, Wifi, WifiOff, Activity, Download, RotateCcw,
-  Loader2, Trash2, Clock
+  Loader2, Trash2, Clock, LogOut
 } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
+} from '@/components/ui/alert-dialog';
 import { RfidModeSwitch } from '@/components/rfid/RfidModeSwitch';
 import { RfidPowerSlider } from '@/components/rfid/RfidPowerSlider';
 import { RfidDebugPanel } from '@/components/rfid/RfidDebugPanel';
