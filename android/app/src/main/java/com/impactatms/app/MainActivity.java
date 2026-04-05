@@ -1,13 +1,20 @@
 package com.impactatms.app;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.view.View;
 import android.view.WindowManager;
+import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.core.splashscreen.SplashScreen;
 import com.getcapacitor.BridgeActivity;
 import com.mivanta.rfid.MivantaRfidPlugin;
 
 public class MainActivity extends BridgeActivity {
+    
+    private static final int CAMERA_PERMISSION_REQUEST = 1001;
     
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -29,11 +36,27 @@ public class MainActivity extends BridgeActivity {
         // Keep screen always on
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         
-        // Start lock task (kiosk mode)
-        startLockTask();
-        
         // Apply immersive sticky mode
         applyImmersiveMode();
+        
+        // Request camera permission BEFORE entering lock task mode
+        // Lock task suppresses system dialogs, so permission must be granted first
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQUEST);
+        } else {
+            startLockTask();
+        }
+    }
+    
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == CAMERA_PERMISSION_REQUEST) {
+            // Enter kiosk mode after permission dialog is dismissed (granted or denied)
+            startLockTask();
+        }
     }
     
     @Override
