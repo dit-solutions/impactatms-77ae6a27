@@ -8,6 +8,7 @@ import { useDevice } from '@/contexts/DeviceContext';
 import { useReadCapture } from '@/domain/use-cases/submit-read';
 import type { RfidTagData } from '@/services/rfid';
 import logoLight from '@/assets/logo-light.png';
+import AdminEscapeWrapper from '@/components/app/AdminEscapeWrapper';
 
 const ScanScreen = () => {
   const { config, isOnline, lanes, selectedLane, setSelectedLane } = useDevice();
