@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import {
   Bug, Wifi, WifiOff, Activity, Download, RotateCcw,
   Loader2, Trash2, Clock, LogOut
 } from 'lucide-react';
+import { AdminEscape } from '@/services/admin-escape-plugin';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
@@ -39,7 +40,33 @@ const DiagnosticsScreen = () => {
   const [testing, setTesting] = useState(false);
   const [recentReads, setRecentReads] = useState<PendingRead[]>([]);
   const [loadingReads, setLoadingReads] = useState(false);
+  const [showKioskExit, setShowKioskExit] = useState(false);
+  const tapCountRef = useRef(0);
+  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigate = useNavigate();
+
+  const handleAboutTap = useCallback(() => {
+    tapCountRef.current += 1;
+    if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+    if (tapCountRef.current >= 10) {
+      tapCountRef.current = 0;
+      setShowKioskExit(true);
+      return;
+    }
+    tapTimerRef.current = setTimeout(() => {
+      tapCountRef.current = 0;
+    }, 3000);
+  }, []);
+
+  const handleExitKiosk = async () => {
+    try {
+      await AdminEscape.exitKiosk();
+      toast({ title: 'Kiosk Mode Exited', description: 'Device is now unlocked' });
+    } catch (err) {
+      toast({ title: 'Error', description: String(err), variant: 'destructive' });
+    }
+    setShowKioskExit(false);
+  };
 
   const handleConnect = async () => {
     setConnecting(true);
@@ -170,7 +197,7 @@ const DiagnosticsScreen = () => {
             </Card>
 
             <Card>
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-3 cursor-default select-none" onClick={handleAboutTap}>
                 <CardTitle className="text-base">About</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -184,6 +211,22 @@ const DiagnosticsScreen = () => {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Kiosk exit confirmation dialog */}
+            <AlertDialog open={showKioskExit} onOpenChange={setShowKioskExit}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Exit Kiosk Mode?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will unpin the app and allow access to the device home screen and other apps.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleExitKiosk}>Exit Kiosk</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
 
             {/* Danger Zone */}
             <Card className="border-destructive/30">
