@@ -2,6 +2,7 @@ import React from 'react';
 import { useDevice } from '@/contexts/DeviceContext';
 import { Lock, AlertTriangle } from 'lucide-react';
 import logoLight from '@/assets/logo-light.png';
+import AdminEscapeWrapper from '@/components/app/AdminEscapeWrapper';
 
 /**
  * Shown when backend returns SUSPENDED status.
