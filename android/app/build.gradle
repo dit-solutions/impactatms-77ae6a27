@@ -25,7 +25,7 @@ android {
     }
     
     defaultConfig {
-        applicationId "app.lovable.f68cb15949ce434d93731abbed2b0512"
+        applicationId "com.impactatms.app"
         minSdk 24
         targetSdk 34
         versionCode getBuildNumber()
