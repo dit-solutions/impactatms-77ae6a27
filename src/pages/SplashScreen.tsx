@@ -18,7 +18,7 @@ const SplashScreen = () => {
 
   if (showSplash || deviceState === 'loading') {
     return (
-      <div className="min-h-screen bg-secondary flex flex-col items-center justify-center gap-6">
+      <div className="min-h-screen bg-secondary flex flex-col items-center justify-center gap-6 pt-[var(--safe-area-top)]">
         <img src={logoLight} alt="Impact ATMS" className="h-16 w-auto" />
         <div className="text-center">
           <h1 className="text-2xl font-bold text-secondary-foreground">Impact ATMS</h1>

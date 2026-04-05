@@ -105,7 +105,7 @@ const DiagnosticsScreen = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background p-4">
+    <div className="min-h-screen bg-background p-4 pt-[max(1rem,var(--safe-area-top))]">
       <div className="max-w-md mx-auto">
         <header className="mb-6">
           <div className="flex items-center gap-3 mb-2">

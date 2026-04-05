@@ -43,7 +43,7 @@ const LoginScreen = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background overflow-y-auto p-4 flex flex-col items-center py-8">
+    <div className="min-h-screen bg-background overflow-y-auto p-4 pt-[max(1rem,var(--safe-area-top))] flex flex-col items-center pb-8">
       <div className="max-w-md w-full space-y-6 my-auto">
         <div className="text-center">
           <AdminEscapeWrapper>

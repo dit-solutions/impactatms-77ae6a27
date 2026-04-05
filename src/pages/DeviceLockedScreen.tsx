@@ -12,7 +12,7 @@ const DeviceLockedScreen = () => {
   const { suspendMessage, deviceId } = useDevice();
 
   return (
-    <div className="min-h-screen bg-destructive/5 flex flex-col items-center justify-center p-6 text-center">
+    <div className="min-h-screen bg-destructive/5 flex flex-col items-center justify-center p-6 pt-[max(1.5rem,var(--safe-area-top))] text-center">
       <div className="max-w-sm space-y-6">
         <AdminEscapeWrapper>
           <img src={logoLight} alt="Impact ATMS" className="h-10 w-auto mx-auto dark:hidden" />
