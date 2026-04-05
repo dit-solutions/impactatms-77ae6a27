@@ -39,7 +39,9 @@ const ScanScreen = () => {
         <header className="mb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <img src={logoLight} alt="Impact ATMS" className="h-10 w-auto dark:hidden" />
+              <AdminEscapeWrapper>
+                <img src={logoLight} alt="Impact ATMS" className="h-10 w-auto dark:hidden" />
+              </AdminEscapeWrapper>
               <div>
                 <h1 className="text-xl font-bold text-secondary">Impact ATMS</h1>
                 {config && (

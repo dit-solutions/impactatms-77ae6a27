@@ -14,7 +14,9 @@ const DeviceLockedScreen = () => {
   return (
     <div className="min-h-screen bg-destructive/5 flex flex-col items-center justify-center p-6 text-center">
       <div className="max-w-sm space-y-6">
-        <img src={logoLight} alt="Impact ATMS" className="h-10 w-auto mx-auto dark:hidden" />
+        <AdminEscapeWrapper>
+          <img src={logoLight} alt="Impact ATMS" className="h-10 w-auto mx-auto dark:hidden" />
+        </AdminEscapeWrapper>
 
         <div className="flex items-center justify-center">
           <div className="h-20 w-20 rounded-full bg-destructive/15 flex items-center justify-center">
