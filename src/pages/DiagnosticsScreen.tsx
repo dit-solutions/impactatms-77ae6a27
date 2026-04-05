@@ -39,33 +39,7 @@ const DiagnosticsScreen = () => {
   const [testing, setTesting] = useState(false);
   const [recentReads, setRecentReads] = useState<PendingRead[]>([]);
   const [loadingReads, setLoadingReads] = useState(false);
-  const [showKioskExit, setShowKioskExit] = useState(false);
-  const tapCountRef = useRef(0);
-  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigate = useNavigate();
-
-  const handleAboutTap = useCallback(() => {
-    tapCountRef.current += 1;
-    if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
-    if (tapCountRef.current >= 10) {
-      tapCountRef.current = 0;
-      setShowKioskExit(true);
-      return;
-    }
-    tapTimerRef.current = setTimeout(() => {
-      tapCountRef.current = 0;
-    }, 3000);
-  }, []);
-
-  const handleExitKiosk = async () => {
-    try {
-      await AdminEscape.exitKiosk();
-      toast({ title: 'Kiosk Mode Exited', description: 'Device is now unlocked' });
-    } catch (err) {
-      toast({ title: 'Error', description: String(err), variant: 'destructive' });
-    }
-    setShowKioskExit(false);
-  };
 
   const handleConnect = async () => {
     setConnecting(true);
