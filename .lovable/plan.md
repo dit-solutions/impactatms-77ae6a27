@@ -1,38 +1,52 @@
 
 
-# Fix: Camera Permission Blocked by Kiosk Lock Task Mode
+# Fix: Admin Escape Accessible from All Screens
 
-## Root Cause
+## Problem
 
-`startLockTask()` in `MainActivity.java` suppresses Android system dialogs — including the camera permission prompt. When the user taps "Open Camera," the `Html5Qrcode` library requests camera access, but Android silently blocks the permission dialog, so nothing happens and no error is thrown.
+The 10-tap admin escape to exit kiosk mode only exists on the **Diagnostics screen**, which is unreachable from the Setup and Login screens. If the device is in kiosk mode during provisioning or login, you're completely trapped — the navigation bars are hidden (immersive mode) and back button is overridden.
 
-## Fix
+## Solution
 
-### `MainActivity.java`
+Create a **global admin escape overlay** that works on every screen, triggered by tapping the app logo 10 times rapidly. Since every screen already shows the Impact ATMS logo, we attach the tap handler there via a shared wrapper component.
 
-Request the camera permission **before** entering lock task mode. Add a runtime permission check in `onCreate()`:
+## Changes
 
-```text
-Flow:
-1. onCreate() → check if CAMERA permission is granted
-2. If NOT granted → request it (dialog appears before lock task)
-3. After permission result (or if already granted) → startLockTask()
-```
+### 1. New: `src/components/app/AdminEscapeWrapper.tsx`
+- A wrapper component that renders its children (the logo) with an `onClick` tap counter
+- 10 taps within 3 seconds triggers an AlertDialog: "Exit Kiosk Mode?"
+- On confirm, calls `AdminEscape.exitKiosk()`
+- This is reusable across all screens
 
-This ensures the permission dialog shows while the app is not yet pinned.
+### 2. `src/pages/ProvisioningScreen.tsx`
+- Wrap the logo `<img>` with `AdminEscapeWrapper`
 
-- Move `startLockTask()` out of `onCreate()` into `onPermissionResult()`
-- Add `ActivityCompat.requestPermissions(this, {CAMERA}, REQUEST_CODE)` before lock task
-- Override `onRequestPermissionsResult()` — call `startLockTask()` after permission is handled (granted or denied)
-- If permission is already granted, call `startLockTask()` immediately
+### 3. `src/pages/LoginScreen.tsx`
+- Wrap the logo `<img>` with `AdminEscapeWrapper`
 
-### No other files change
+### 4. `src/pages/ScanScreen.tsx`
+- Wrap the logo `<img>` with `AdminEscapeWrapper`
 
-The web layer (`ProvisioningScreen.tsx`), manifest permissions, and everything else remain untouched.
+### 5. `src/pages/DiagnosticsScreen.tsx`
+- Remove the existing About-card tap handler (`handleAboutTap`, `tapCountRef`, `tapTimerRef`, `showKioskExit` state, and the AlertDialog)
+- Add the logo in the header wrapped with `AdminEscapeWrapper` (or wrap the existing back-arrow area)
 
-## Files Changed
+### 6. `src/pages/DeviceLockedScreen.tsx`
+- Wrap the logo with `AdminEscapeWrapper` (so locked devices can also be escaped)
+
+## What stays the same
+- All native Java code (MainActivity, AdminEscapePlugin, BootReceiver) — unchanged
+- All kiosk mode behavior — unchanged
+- All navigation, scanning, provisioning logic — unchanged
+
+## File Summary
 
 | File | Change |
 |------|--------|
-| `MainActivity.java` | Request CAMERA permission before `startLockTask()`, enter kiosk only after permission result |
+| `AdminEscapeWrapper.tsx` (new) | Shared 10-tap escape component with confirmation dialog |
+| `ProvisioningScreen.tsx` | Wrap logo with escape wrapper |
+| `LoginScreen.tsx` | Wrap logo with escape wrapper |
+| `ScanScreen.tsx` | Wrap logo with escape wrapper |
+| `DiagnosticsScreen.tsx` | Remove old tap handler, use shared wrapper |
+| `DeviceLockedScreen.tsx` | Wrap logo with escape wrapper |
 
