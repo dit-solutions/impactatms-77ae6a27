@@ -8,6 +8,7 @@ import { collectDeviceInfo } from '@/security/device-fingerprint';
 import { logger } from '@/utils/logger';
 import { toast } from '@/hooks/use-toast';
 import logoLight from '@/assets/logo-light.png';
+import AdminEscapeWrapper from '@/components/app/AdminEscapeWrapper';
 
 const ProvisioningScreen = () => {
   const { completeProvisioning } = useDevice();
