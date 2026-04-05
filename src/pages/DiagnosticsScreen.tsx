@@ -197,7 +197,7 @@ const DiagnosticsScreen = () => {
             </Card>
 
             <Card>
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-3 cursor-default select-none" onClick={handleAboutTap}>
                 <CardTitle className="text-base">About</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -211,6 +211,22 @@ const DiagnosticsScreen = () => {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Kiosk exit confirmation dialog */}
+            <AlertDialog open={showKioskExit} onOpenChange={setShowKioskExit}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Exit Kiosk Mode?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will unpin the app and allow access to the device home screen and other apps.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleExitKiosk}>Exit Kiosk</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
 
             {/* Danger Zone */}
             <Card className="border-destructive/30">
