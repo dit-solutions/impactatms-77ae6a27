@@ -122,7 +122,7 @@ const ProvisioningScreen = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background p-4 flex flex-col items-center justify-center">
+    <div className="min-h-screen bg-background p-4 pt-[max(1rem,var(--safe-area-top))] flex flex-col items-center justify-center">
       <div className="max-w-md w-full space-y-6">
         <div className="text-center">
           <AdminEscapeWrapper>
