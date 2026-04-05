@@ -170,7 +170,7 @@ const DiagnosticsScreen = () => {
             </Card>
 
             <Card>
-              <CardHeader className="pb-3 cursor-default select-none" onClick={handleAboutTap}>
+              <CardHeader className="pb-3">
                 <CardTitle className="text-base">About</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
