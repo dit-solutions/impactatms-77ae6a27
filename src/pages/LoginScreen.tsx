@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, AlertCircle, LogIn } from 'lucide-react';
+import { Loader2, AlertCircle, LogIn, Eye, EyeOff } from 'lucide-react';
 import { useDevice } from '@/contexts/DeviceContext';
 import { apiClient } from '@/data/remote/api-client';
 import { logger } from '@/utils/logger';
@@ -16,6 +16,7 @@ const LoginScreen = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,8 +43,8 @@ const LoginScreen = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background p-4 flex flex-col items-center justify-center">
-      <div className="max-w-md w-full space-y-6">
+    <div className="min-h-screen bg-background overflow-y-auto p-4 flex flex-col items-center py-8">
+      <div className="max-w-md w-full space-y-6 my-auto">
         <div className="text-center">
           <AdminEscapeWrapper>
             <img src={logoLight} alt="Impact ATMS" className="h-12 w-auto mx-auto mb-4 dark:hidden" />
@@ -81,15 +82,32 @@ const LoginScreen = () => {
 
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={loading}
-                  autoComplete="current-password"
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={loading}
+                    autoComplete="current-password"
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                    onClick={() => setShowPassword(!showPassword)}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </Button>
+                </div>
               </div>
 
               {error && (
