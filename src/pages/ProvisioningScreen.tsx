@@ -8,6 +8,7 @@ import { collectDeviceInfo } from '@/security/device-fingerprint';
 import { logger } from '@/utils/logger';
 import { toast } from '@/hooks/use-toast';
 import logoLight from '@/assets/logo-light.png';
+import AdminEscapeWrapper from '@/components/app/AdminEscapeWrapper';
 
 const ProvisioningScreen = () => {
   const { completeProvisioning } = useDevice();
@@ -124,7 +125,9 @@ const ProvisioningScreen = () => {
     <div className="min-h-screen bg-background p-4 flex flex-col items-center justify-center">
       <div className="max-w-md w-full space-y-6">
         <div className="text-center">
-          <img src={logoLight} alt="Impact ATMS" className="h-12 w-auto mx-auto mb-4 dark:hidden" />
+          <AdminEscapeWrapper>
+            <img src={logoLight} alt="Impact ATMS" className="h-12 w-auto mx-auto mb-4 dark:hidden" />
+          </AdminEscapeWrapper>
           <h1 className="text-2xl font-bold text-foreground">Device Setup</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Scan the QR code from your admin panel to register this device
