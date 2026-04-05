@@ -11,7 +11,7 @@ def getBuildNumber = {
 }
 
 android {
-    namespace "app.lovable.f68cb15949ce434d93731abbed2b0512"
+    namespace "com.impactatms.app"
     compileSdk 36
     
     // Signing configuration using the consistent keystore from CI
