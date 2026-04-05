@@ -8,6 +8,7 @@ import { useDevice } from '@/contexts/DeviceContext';
 import { apiClient } from '@/data/remote/api-client';
 import { logger } from '@/utils/logger';
 import logoLight from '@/assets/logo-light.png';
+import AdminEscapeWrapper from '@/components/app/AdminEscapeWrapper';
 
 const LoginScreen = () => {
   const { completeLogin } = useDevice();
