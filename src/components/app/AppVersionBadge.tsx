@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { useAppVersion } from '@/hooks/use-app-version';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw, Download, Smartphone, Globe } from 'lucide-react';
+import { RefreshCw, Download, Smartphone, Globe, CheckCircle } from 'lucide-react';
 
 interface AppVersionBadgeProps {
   showUpdateCheck?: boolean;
@@ -15,11 +15,11 @@ export function AppVersionBadge({ showUpdateCheck = true, className = '' }: AppV
     isNative, 
     updateAvailable, 
     isCheckingUpdate, 
+    isUpToDate,
     checkUpdate, 
     installUpdate 
   } = useAppVersion();
 
-  // Auto-check for updates on mount (native only)
   useEffect(() => {
     if (isNative && showUpdateCheck) {
       checkUpdate();
@@ -32,7 +32,6 @@ export function AppVersionBadge({ showUpdateCheck = true, className = '' }: AppV
 
   return (
     <div className={`flex flex-col items-center gap-2 ${className}`}>
-      {/* Version display */}
       <div className="flex items-center gap-2">
         {isNative ? (
           <Smartphone className="h-3 w-3 text-muted-foreground" />
@@ -47,8 +46,7 @@ export function AppVersionBadge({ showUpdateCheck = true, className = '' }: AppV
         </Badge>
       </div>
 
-      {/* Update section (native only) */}
-      {isNative && showUpdateCheck && (
+      {showUpdateCheck && (
         <div className="flex items-center gap-2">
           {updateAvailable ? (
             <Button 
@@ -60,6 +58,11 @@ export function AppVersionBadge({ showUpdateCheck = true, className = '' }: AppV
               <Download className="h-3 w-3" />
               Update to {updateAvailable.latestVersion}
             </Button>
+          ) : isUpToDate ? (
+            <span className="text-xs text-green-600 flex items-center gap-1">
+              <CheckCircle className="h-3 w-3" />
+              Up to date
+            </span>
           ) : (
             <Button 
               size="sm" 
@@ -75,7 +78,6 @@ export function AppVersionBadge({ showUpdateCheck = true, className = '' }: AppV
         </div>
       )}
 
-      {/* Update available banner */}
       {updateAvailable && (
         <div className="text-xs text-primary text-center">
           New version available: {updateAvailable.latestVersion}

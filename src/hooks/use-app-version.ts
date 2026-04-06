@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useToast } from '@/hooks/use-toast';
 import { 
   getAppVersion, 
   isNativeApp, 
@@ -13,6 +14,7 @@ export interface UseAppVersionResult {
   isNative: boolean;
   updateAvailable: UpdateInfo | null;
   isCheckingUpdate: boolean;
+  isUpToDate: boolean;
   checkUpdate: () => Promise<void>;
   installUpdate: () => Promise<void>;
 }
@@ -22,6 +24,8 @@ export function useAppVersion(): UseAppVersionResult {
   const [isNative, setIsNative] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState<UpdateInfo | null>(null);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [isUpToDate, setIsUpToDate] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     const loadVersion = async () => {
@@ -34,14 +38,32 @@ export function useAppVersion(): UseAppVersionResult {
   }, []);
 
   const checkUpdate = async () => {
-    if (!version || !isNative) return;
+    if (!version) return;
     
     setIsCheckingUpdate(true);
+    setIsUpToDate(false);
     try {
       const update = await checkForUpdates(version.build);
       setUpdateAvailable(update);
+      if (update) {
+        toast({
+          title: 'Update available',
+          description: `Version ${update.latestVersion} is ready to install.`,
+        });
+      } else {
+        setIsUpToDate(true);
+        toast({
+          title: 'Up to date',
+          description: `You're running the latest version (${version.version}).`,
+        });
+      }
     } catch (error) {
       console.error('Failed to check for updates:', error);
+      toast({
+        title: 'Update check failed',
+        description: 'Could not reach the update server. Check your connection.',
+        variant: 'destructive',
+      });
     } finally {
       setIsCheckingUpdate(false);
     }
@@ -54,6 +76,11 @@ export function useAppVersion(): UseAppVersionResult {
       await downloadAndInstallUpdate(updateAvailable.downloadUrl);
     } catch (error) {
       console.error('Failed to install update:', error);
+      toast({
+        title: 'Install failed',
+        description: 'Could not download or install the update.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -62,6 +89,7 @@ export function useAppVersion(): UseAppVersionResult {
     isNative,
     updateAvailable,
     isCheckingUpdate,
+    isUpToDate,
     checkUpdate,
     installUpdate
   };
