@@ -1,36 +1,26 @@
 
 
-# Fix: Top Content Overlapped by System Bar in Kiosk Mode
+# Battery Indicator + Low Battery Warning
 
-## Problem
-In kiosk/immersive mode, the Android status bar area overlaps the app's top content (logo, settings icon). The app uses `p-4` padding which doesn't account for the system bar safe area inset.
+## Changes
 
-## Fix
+### 1. New: `src/hooks/use-battery.ts`
+- Hook using `navigator.getBattery()` API
+- Listens to `levelchange` and `chargingchange` events (event-driven, no polling)
+- Returns `{ percent: number | null, isCharging: boolean }`
+- Fires a destructive toast once when battery drops below 15% (tracks threshold crossing with a ref)
 
-### `src/index.css`
-Add a CSS utility that uses `env(safe-area-inset-top)` to push content below the system bar overlay:
-```css
-:root {
-  --safe-area-top: env(safe-area-inset-top, 0px);
-}
-```
+### 2. `src/pages/ScanScreen.tsx`
+- Import `useBattery` and `BatteryLow`, `BatteryCharging`, `Battery` icons
+- Add battery indicator in the header next to Settings button showing percent + icon
+- Color coding: green (>50%), yellow (15-50%), red (<15%)
 
-### All screen containers — add top safe-area padding
-Update the outermost `div` on each screen to use `pt-[env(safe-area-inset-top)]` or add a calculated top padding:
+### 3. `src/pages/DiagnosticsScreen.tsx`
+- Add battery percentage row in the Device Info card (after "Pending Reads" row around line 168)
 
-| File | Current | Change |
-|------|---------|--------|
-| `ScanScreen.tsx` | `p-4` | `p-4 pt-[max(1rem,env(safe-area-inset-top))]` |
-| `LoginScreen.tsx` | `p-4` | Same safe-area top padding |
-| `ProvisioningScreen.tsx` | `p-6` | Same approach |
-| `DiagnosticsScreen.tsx` | top padding | Same approach |
-| `DeviceLockedScreen.tsx` | `p-6` | Same approach |
-
-### `index.html`
-Add viewport meta for safe areas (if not already present):
-```html
-<meta name="viewport" content="..., viewport-fit=cover">
-```
-
-This ensures content respects the system bar inset on all screens without breaking non-kiosk layouts (the `env()` value falls back to `0px`).
+| File | Change |
+|------|--------|
+| `src/hooks/use-battery.ts` | New hook — event-driven battery monitoring + low battery toast |
+| `src/pages/ScanScreen.tsx` | Battery icon + percent in header |
+| `src/pages/DiagnosticsScreen.tsx` | Battery row in Device Info card |
 
