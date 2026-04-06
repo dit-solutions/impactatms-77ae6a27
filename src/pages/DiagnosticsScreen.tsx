@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useBattery } from '@/hooks/use-battery';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
