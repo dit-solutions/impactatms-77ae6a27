@@ -4,6 +4,7 @@
  */
 
 import { App } from '@capacitor/app';
+import { registerPlugin } from '@capacitor/core';
 
 export interface AppVersion {
   version: string;
@@ -18,6 +19,12 @@ export interface UpdateInfo {
   mandatory?: boolean;
 }
 
+interface AppUpdatePluginInterface {
+  downloadAndInstall(options: { url: string }): Promise<void>;
+}
+
+const AppUpdatePlugin = registerPlugin<AppUpdatePluginInterface>('AppUpdate');
+
 // Public manifest URL (hosted on the published app domain)
 const VERSION_MANIFEST_URL = 'https://impactatms.lovable.app/version.json';
 
@@ -26,7 +33,6 @@ const VERSION_MANIFEST_URL = 'https://impactatms.lovable.app/version.json';
  */
 export async function getAppVersion(): Promise<AppVersion> {
   try {
-    // Only works in native Capacitor environment
     if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) {
       const info = await App.getInfo();
       return {
@@ -38,7 +44,6 @@ export async function getAppVersion(): Promise<AppVersion> {
     console.warn('Could not get native app info:', error);
   }
   
-  // Fallback for web environment
   return {
     version: '1.0.0',
     build: 'web'
@@ -55,14 +60,11 @@ export function isNativeApp(): boolean {
 
 /**
  * Check for updates using the public version manifest
- * @param currentBuild Current build number
- * @returns Update info if available, null otherwise
  */
 export async function checkForUpdates(currentBuild: string): Promise<UpdateInfo | null> {
   try {
-    // Fetch version manifest from the published app domain
     const response = await fetch(VERSION_MANIFEST_URL, {
-      cache: 'no-store' // Always get fresh data
+      cache: 'no-store'
     });
 
     if (!response.ok) {
@@ -93,8 +95,7 @@ export async function checkForUpdates(currentBuild: string): Promise<UpdateInfo 
 }
 
 /**
- * Download and install APK update
- * This opens the APK download URL which Android will handle
+ * Download and install APK update via native plugin
  */
 export async function downloadAndInstallUpdate(downloadUrl: string): Promise<void> {
   if (!isNativeApp()) {
@@ -103,10 +104,9 @@ export async function downloadAndInstallUpdate(downloadUrl: string): Promise<voi
   }
 
   try {
-    // Open the download URL - Android will download and prompt to install
-    window.open(downloadUrl, '_system');
+    await AppUpdatePlugin.downloadAndInstall({ url: downloadUrl });
   } catch (error) {
-    console.error('Error downloading update:', error);
+    console.error('Error downloading/installing update:', error);
     throw error;
   }
 }

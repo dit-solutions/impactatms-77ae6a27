@@ -19,6 +19,9 @@
     <!-- Boot auto-launch -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     
+    <!-- APK install permission for OTA updates -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

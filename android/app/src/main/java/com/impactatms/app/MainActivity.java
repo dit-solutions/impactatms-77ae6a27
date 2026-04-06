@@ -31,6 +31,7 @@ public class MainActivity extends BridgeActivity {
         
         registerPlugin(MivantaRfidPlugin.class);
         registerPlugin(AdminEscapePlugin.class);
+        registerPlugin(AppUpdatePlugin.class);
         super.onCreate(savedInstanceState);
         
         // Keep screen always on
