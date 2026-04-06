@@ -2,7 +2,8 @@ import React, { useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Settings, WifiOff } from 'lucide-react';
+import { Settings, WifiOff, Battery, BatteryCharging, BatteryWarning } from 'lucide-react';
+import { useBattery } from '@/hooks/use-battery';
 import { RfidReaderPanel } from '@/components/rfid';
 import { useDevice } from '@/contexts/DeviceContext';
 import { useReadCapture } from '@/domain/use-cases/submit-read';
@@ -13,6 +14,7 @@ import AdminEscapeWrapper from '@/components/app/AdminEscapeWrapper';
 const ScanScreen = () => {
   const { config, isOnline, lanes, selectedLane, setSelectedLane } = useDevice();
   const { captureRead, lastResult } = useReadCapture();
+  const { percent: batteryPercent, isCharging } = useBattery();
 
   const handleTagDetected = useCallback(async (tag: RfidTagData) => {
     if (selectedLane) {
@@ -52,6 +54,14 @@ const ScanScreen = () => {
               </div>
             </div>
             <div className="flex items-center gap-1">
+              {batteryPercent !== null && (
+                <div className={`flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded ${
+                  batteryPercent <= 15 ? 'text-destructive' : batteryPercent <= 50 ? 'text-yellow-600 dark:text-yellow-400' : 'text-emerald-600 dark:text-emerald-400'
+                }`}>
+                  {isCharging ? <BatteryCharging className="h-4 w-4" /> : batteryPercent <= 15 ? <BatteryWarning className="h-4 w-4" /> : <Battery className="h-4 w-4" />}
+                  {batteryPercent}%
+                </div>
+              )}
               <Button variant="ghost" size="icon" asChild>
                 <Link to="/diagnostics">
                   <Settings className="h-5 w-5" />

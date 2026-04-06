@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useBattery } from '@/hooks/use-battery';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,6 +37,7 @@ const DiagnosticsScreen = () => {
   const { power, mode, isConnected, setPower, setMode, refreshStatus } = useRfidSettings();
   const { deviceId, config, lastHeartbeat, lastSync, pendingCount, resetDevice, logout } = useDevice();
   const [connecting, setConnecting] = useState(false);
+  const { percent: batteryPercent, isCharging } = useBattery();
   const [testing, setTesting] = useState(false);
   const [recentReads, setRecentReads] = useState<PendingRead[]>([]);
   const [loadingReads, setLoadingReads] = useState(false);
@@ -165,6 +167,11 @@ const DiagnosticsScreen = () => {
                   label="Pending Reads"
                   value={String(pendingCount)}
                   highlight={pendingCount > 0}
+                />
+                <InfoRow
+                  label="Battery"
+                  value={batteryPercent !== null ? `${batteryPercent}%${isCharging ? ' ⚡' : ''}` : 'N/A'}
+                  highlight={batteryPercent !== null && batteryPercent <= 15}
                 />
               </CardContent>
             </Card>
