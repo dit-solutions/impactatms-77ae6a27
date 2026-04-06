@@ -37,6 +37,7 @@ const DiagnosticsScreen = () => {
   const { power, mode, isConnected, setPower, setMode, refreshStatus } = useRfidSettings();
   const { deviceId, config, lastHeartbeat, lastSync, pendingCount, resetDevice, logout } = useDevice();
   const [connecting, setConnecting] = useState(false);
+  const { percent: batteryPercent, isCharging } = useBattery();
   const [testing, setTesting] = useState(false);
   const [recentReads, setRecentReads] = useState<PendingRead[]>([]);
   const [loadingReads, setLoadingReads] = useState(false);
