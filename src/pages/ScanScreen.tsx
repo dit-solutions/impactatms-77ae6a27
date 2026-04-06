@@ -14,6 +14,7 @@ import AdminEscapeWrapper from '@/components/app/AdminEscapeWrapper';
 const ScanScreen = () => {
   const { config, isOnline, lanes, selectedLane, setSelectedLane } = useDevice();
   const { captureRead, lastResult } = useReadCapture();
+  const { percent: batteryPercent, isCharging } = useBattery();
 
   const handleTagDetected = useCallback(async (tag: RfidTagData) => {
     if (selectedLane) {
