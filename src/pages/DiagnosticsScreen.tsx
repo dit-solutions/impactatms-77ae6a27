@@ -166,6 +166,11 @@ const DiagnosticsScreen = () => {
                   value={String(pendingCount)}
                   highlight={pendingCount > 0}
                 />
+                <InfoRow
+                  label="Battery"
+                  value={batteryPercent !== null ? `${batteryPercent}%${isCharging ? ' ⚡' : ''}` : 'N/A'}
+                  highlight={batteryPercent !== null && batteryPercent <= 15}
+                />
               </CardContent>
             </Card>
 

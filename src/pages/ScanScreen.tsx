@@ -54,6 +54,14 @@ const ScanScreen = () => {
               </div>
             </div>
             <div className="flex items-center gap-1">
+              {batteryPercent !== null && (
+                <div className={`flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded ${
+                  batteryPercent <= 15 ? 'text-destructive' : batteryPercent <= 50 ? 'text-yellow-600 dark:text-yellow-400' : 'text-emerald-600 dark:text-emerald-400'
+                }`}>
+                  {isCharging ? <BatteryCharging className="h-4 w-4" /> : batteryPercent <= 15 ? <BatteryWarning className="h-4 w-4" /> : <Battery className="h-4 w-4" />}
+                  {batteryPercent}%
+                </div>
+              )}
               <Button variant="ghost" size="icon" asChild>
                 <Link to="/diagnostics">
                   <Settings className="h-5 w-5" />
