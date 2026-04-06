@@ -44,14 +44,11 @@ const ScanScreen = () => {
               <AdminEscapeWrapper>
                 <img src={logoLight} alt="Impact ATMS" className="h-10 w-auto dark:hidden" />
               </AdminEscapeWrapper>
-              <div>
-                <h1 className="text-xl font-bold text-secondary">Impact ATMS</h1>
-                {config && (
-                  <p className="text-xs text-muted-foreground">
-                    {config.plaza.name}
-                  </p>
-                )}
-              </div>
+              {config && (
+                <p className="text-xs text-muted-foreground">
+                  {config.plaza.name}
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-1">
               {batteryPercent !== null && (
