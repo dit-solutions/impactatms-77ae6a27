@@ -90,6 +90,35 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Commit version manifest
+        if: success()
+        run: |
+          BUILD=${{ github.run_number }}
+          VERSION="1.0.${BUILD}"
+          DOWNLOAD="https://github.com/dit-solutions/impactatms-77ae6a27/releases/download/v${VERSION}/ImpactATMS-V${VERSION}.apk"
+
+          cat > public/version.json << EOF
+          {
+            "version": "${VERSION}",
+            "build": ${BUILD},
+            "downloadUrl": "${DOWNLOAD}",
+            "releaseNotes": "Build ${BUILD}",
+            "releaseDate": "$(date -u +%Y-%m-%d)"
+          }
+          EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/version.json
+
+          # Rebase-and-retry loop to handle concurrent pushes
+          for i in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" || true
+            git commit -m "chore: update version.json to v${VERSION} [skip ci]" --allow-empty && \
+            git push origin HEAD:"${GITHUB_REF_NAME}" && break
+            sleep 2
+          done
+
       - name: Print build logs on failure
         if: failure()
         run: |
