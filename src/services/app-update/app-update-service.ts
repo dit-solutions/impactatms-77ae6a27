@@ -79,7 +79,7 @@ export async function checkForUpdates(currentBuild: string): Promise<UpdateInfo 
 
     if (latestBuild > currentBuildNum && manifest.downloadUrl) {
       return {
-        latestVersion: manifest.version || `1.0.${latestBuild}`,
+        latestVersion: manifest.version || '1.0.0',
         latestBuild,
         downloadUrl: manifest.downloadUrl,
         releaseNotes: manifest.releaseNotes,
