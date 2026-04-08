@@ -47,6 +47,9 @@ class SyncWorker {
   }
 
   async syncPending() {
+    if (!networkStatus.isOnline) {
+      return;
+    }
 
     try {
       const pending = await db.getPending(50);
