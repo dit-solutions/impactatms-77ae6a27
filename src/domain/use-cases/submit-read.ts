@@ -5,8 +5,10 @@
 
 import { useState, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { toast } from 'sonner';
 import { db } from '@/data/local/database';
 import { apiClient, ApiAuthError } from '@/data/remote/api-client';
+import { networkStatus } from '@/utils/network-status';
 import { logger } from '@/utils/logger';
 import { syncWorker } from '@/workers/sync-worker';
 import type { PendingRead } from '@/data/local/entities';
@@ -22,6 +24,13 @@ export function useReadCapture() {
   const [lastResult, setLastResult] = useState<ReadResultDisplay | null>(null);
 
   const captureRead = useCallback(async (tag: RfidTagData, laneId: string) => {
+    // Block submission when offline
+    if (!networkStatus.isOnline) {
+      logger.warn('Device offline — tag not submitted');
+      toast.error('Device Offline — tag not submitted');
+      return;
+    }
+
     const localReadId = uuidv4();
     const now = Date.now();
 

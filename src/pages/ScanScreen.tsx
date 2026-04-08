@@ -34,7 +34,7 @@ const ScanScreen = () => {
         {!isOnline && (
           <div className="mb-3 flex items-center gap-2 p-2 rounded-lg bg-destructive/10 text-destructive text-sm">
             <WifiOff className="h-4 w-4" />
-            <span>Offline — reads are queued locally</span>
+            <span>Device Offline</span>
           </div>
         )}
 
