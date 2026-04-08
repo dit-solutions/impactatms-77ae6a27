@@ -30,6 +30,10 @@ export function AppVersionBadge({ showUpdateCheck = true, className = '' }: AppV
     return null;
   }
 
+  const displayVersion = version.version === version.build 
+    ? `v${version.version}` 
+    : `v${version.version} (Build ${version.build})`;
+
   return (
     <div className={`flex flex-col items-center gap-2 ${className}`}>
       <div className="flex items-center gap-2">
@@ -39,7 +43,7 @@ export function AppVersionBadge({ showUpdateCheck = true, className = '' }: AppV
           <Globe className="h-3 w-3 text-muted-foreground" />
         )}
         <span className="text-xs text-muted-foreground">
-          v{version.version} (Build {version.build})
+          {displayVersion}
         </span>
         <Badge variant={isNative ? "default" : "secondary"} className="text-[10px] px-1.5 py-0">
           {isNative ? 'Native' : 'Web'}
@@ -56,7 +60,7 @@ export function AppVersionBadge({ showUpdateCheck = true, className = '' }: AppV
               className="h-7 text-xs gap-1"
             >
               <Download className="h-3 w-3" />
-              Update to {updateAvailable.latestVersion}
+              Update to v{updateAvailable.latestVersion}
             </Button>
           ) : isUpToDate ? (
             <span className="text-xs text-green-600 flex items-center gap-1">
@@ -80,7 +84,7 @@ export function AppVersionBadge({ showUpdateCheck = true, className = '' }: AppV
 
       {updateAvailable && (
         <div className="text-xs text-primary text-center">
-          New version available: {updateAvailable.latestVersion}
+          New version available: v{updateAvailable.latestVersion}
           {updateAvailable.mandatory && (
             <span className="ml-1 text-destructive font-medium">(Required)</span>
           )}
