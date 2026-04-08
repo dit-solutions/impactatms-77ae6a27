@@ -74,18 +74,22 @@ jobs:
 
       - name: Rename APK with version
         run: |
-          VERSION="1.0.${{ github.run_number }}"
-          mv android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/ImpactATMS-V${VERSION}.apk
-          echo "APK renamed to ImpactATMS-V${VERSION}.apk"
+          SEMVER=$(node -p "require('./package.json').version")
+          BUILD=${{ github.run_number }}
+          VERSION="v${SEMVER}-b${BUILD}"
+          mv android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/ImpactATMS-${VERSION}.apk
+          echo "APK renamed to ImpactATMS-${VERSION}.apk"
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "SEMVER=${SEMVER}" >> $GITHUB_ENV
+          echo "BUILD=${BUILD}" >> $GITHUB_ENV
 
       - name: Create GitHub Release with APK
         if: success()
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.VERSION }}
-          name: ImpactATMS V${{ env.VERSION }}
-          files: android/app/build/outputs/apk/debug/ImpactATMS-V${{ env.VERSION }}.apk
+          tag_name: ${{ env.VERSION }}
+          name: ImpactATMS ${{ env.VERSION }}
+          files: android/app/build/outputs/apk/debug/ImpactATMS-${{ env.VERSION }}.apk
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -93,13 +97,14 @@ jobs:
       - name: Commit version manifest
         if: success()
         run: |
-          BUILD=${{ github.run_number }}
-          VERSION="1.0.${BUILD}"
-          DOWNLOAD="https://github.com/dit-solutions/impactatms-77ae6a27/releases/download/v${VERSION}/ImpactATMS-V${VERSION}.apk"
+          SEMVER="${{ env.SEMVER }}"
+          BUILD="${{ env.BUILD }}"
+          VERSION="${{ env.VERSION }}"
+          DOWNLOAD="https://github.com/dit-solutions/impactatms-77ae6a27/releases/download/${VERSION}/ImpactATMS-${VERSION}.apk"
 
           cat > public/version.json << EOF
           {
-            "version": "${VERSION}",
+            "version": "${SEMVER}",
             "build": ${BUILD},
             "downloadUrl": "${DOWNLOAD}",
             "releaseNotes": "Build ${BUILD}",
@@ -114,7 +119,7 @@ jobs:
           # Rebase-and-retry loop to handle concurrent pushes
           for i in 1 2 3; do
             git pull --rebase origin "${GITHUB_REF_NAME}" || true
-            git commit -m "chore: update version.json to v${VERSION} [skip ci]" --allow-empty && \
+            git commit -m "chore: update version.json to ${VERSION} [skip ci]" --allow-empty && \
             git push origin HEAD:"${GITHUB_REF_NAME}" && break
             sleep 2
           done
