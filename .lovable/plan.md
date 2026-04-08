@@ -1,40 +1,79 @@
 
+What’s happening now
 
-# Fix: OTA Update Check + App Version Display
+- Under the current code, `1.0.158` is treated as the app version because Android is set to:
+  - `versionCode = GITHUB_RUN_NUMBER`
+  - `versionName = "1.0.${GITHUB_RUN_NUMBER}"`
+- So yes: with the current setup, build 158 will display as `1.0.158`.
+- But you are also correct that this is not proper semantic versioning. Right now the build counter is being used like the patch version.
 
-## Problems Found
+Why this is confusing
 
-1. **`public/version.json` is stuck at build 101** — The CI workflow creates GitHub releases but never updates `version.json`. So when the app fetches `https://impactatms.lovable.app/version.json`, it still shows build 101. If the installed APK is build 156+, the comparison `101 > 156` is false, so "no update available."
+- `android/app/build.gradle` makes the displayed version depend on the CI run number.
+- `.github/workflows/android-build.yml` writes the same value into `public/version.json`.
+- `package.json` is still `0.0.0`, so there is no real “source of truth” for semantic versions.
+- For local/manual builds, `build.gradle` falls back to a timestamp if `GITHUB_RUN_NUMBER` is missing, which can make the installed APK version look wrong and can also confuse OTA update comparisons.
 
-2. **App version may show wrong** — `App.getInfo()` from `@capacitor/app` should return the real native version, but if it throws (plugin not registered, etc.), the catch block silently falls back to `1.0.0 (web)`. No feedback is shown to the user.
+Recommended fix
 
-## Fix
+1. Separate semantic version from build number
+   - Semantic version: `MAJOR.MINOR.PATCH` (example `1.2.3`)
+   - Build number: monotonically increasing internal number (example `158`)
+   - UI should show: `v1.2.3 (Build 158)`
 
-### 1. CI Workflow: Auto-update `version.json` on every release
+2. Create one source of truth for semantic version
+   - Recommended: use `package.json.version` or a dedicated `app-version.json`
+   - Example:
+     ```text
+     SemVer = 1.0.2
+     Build = 158
+     Display = v1.0.2 (Build 158)
+     ```
 
-Add a step in `.github/workflows/android-build.yml` that:
-- Updates `public/version.json` with the new build number, version, and download URL
-- Commits and pushes it back to the repo
-- This ensures the published app at `impactatms.lovable.app` always serves the latest manifest after you click "Publish"
+3. Update Android versioning
+   - `versionName` should come from the semantic version source
+   - `versionCode` should remain the numeric build number for Android updates
+   - Remove the current `1.0.${build}` pattern
 
-### 2. Update `version.json` now to the latest build
+4. Update OTA manifest and release naming
+   - `public/version.json` should keep both fields separately:
+     - `"version": "1.0.2"`
+     - `"build": 158`
+   - CI should read semantic version from the source file, then inject the current build number
+   - Release filenames/tags can include both, e.g. `ImpactATMS-v1.0.2-b158.apk`
 
-Set it to the current latest release (you said 156+, so we'll point to the newest release). You'll need to publish the app afterward for it to go live.
+5. Fix the app’s displayed version state
+   - Keep using `App.getInfo()` for native values
+   - Improve fallback behavior so it does not silently pretend to be `1.0.0 (web)` when native version lookup fails
+   - Optionally show a clearer label for local/debug builds so they are not mistaken for release builds
 
-### 3. Add error feedback for update check
+6. Prevent local/manual build confusion
+   - Stop using timestamp as the visible app version
+   - Either:
+     - require an explicit build number for manually installed release APKs, or
+     - mark local builds clearly as non-release so OTA logic does not compare them like production builds
 
-In the `checkUpdate` function, show a toast on success ("You're up to date") or failure, so tapping "Check for updates" gives visible feedback instead of silently doing nothing.
-
-## File Changes
+Files to update
 
 | File | Change |
 |------|--------|
-| `.github/workflows/android-build.yml` | Add step to update `public/version.json` and push commit after release |
-| `public/version.json` | Update to latest build number (will ask you for the exact number) |
-| `src/hooks/use-app-version.ts` | Add toast feedback: "Up to date" when no update found, error toast on failure |
-| `src/components/app/AppVersionBadge.tsx` | Show "Up to date ✓" text after successful check with no update |
+| `android/app/build.gradle` | Split `versionName` (semver) from `versionCode` (build number) |
+| `package.json` or new `app-version.json` | Add real semantic version source |
+| `.github/workflows/android-build.yml` | Read semver from source, keep build from CI run number, generate proper release names + manifest |
+| `public/version.json` | Store semver and build separately |
+| `src/services/app-update/app-update-service.ts` | Keep OTA comparison based on build number only |
+| `src/hooks/use-app-version.ts` | Improve version load/fallback handling |
+| `src/components/app/AppVersionBadge.tsx` | Show `vX.Y.Z (Build N)` clearly |
 
-## Important Note
+Expected result
 
-After CI pushes the updated `version.json`, you must **Publish** the app in Lovable so the live URL (`impactatms.lovable.app/version.json`) serves the new manifest. The native app fetches from that URL.
+- Big changes: bump major, e.g. `2.0.0`
+- New features: bump minor, e.g. `1.1.0`
+- Bug fixes: bump patch, e.g. `1.1.1`
+- CI release/build counter stays separate, e.g. `Build 158`
 
+So the short answer is:
+
+- Under the current codebase, `1.0.158` is “correct” for build 158.
+- But from a versioning standards perspective, it is not correct semver.
+- The proper fix is to separate semantic versioning from build numbering across Android, OTA manifest, CI, and the UI.
