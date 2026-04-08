@@ -1,13 +1,21 @@
 apply plugin: 'com.android.application'
 
-// Auto-increment versionCode using GitHub Actions run number or timestamp
+// Semantic version from package.json (source of truth)
+def getSemanticVersion = {
+    def packageJson = new groovy.json.JsonSlurper().parseText(
+        new File("${project.rootDir}/../package.json").text
+    )
+    return packageJson.version ?: "1.0.0"
+}
+
+// Build number: CI run number or fallback for local builds
 def getBuildNumber = {
     def runNumber = System.getenv("GITHUB_RUN_NUMBER")
     if (runNumber != null) {
         return runNumber.toInteger()
     }
-    // Fallback: use timestamp-based version for local builds
-    return (new Date().time / 1000).toInteger()
+    // Local builds use a fixed dev build number (not timestamp)
+    return 1
 }
 
 android {
@@ -29,7 +37,7 @@ android {
         minSdk 24
         targetSdk 34
         versionCode getBuildNumber()
-        versionName "1.0.${getBuildNumber()}"
+        versionName getSemanticVersion()
     }
     
     buildTypes {
