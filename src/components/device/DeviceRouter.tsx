@@ -9,6 +9,8 @@ import { syncWorker } from '@/workers/sync-worker';
 import { configFetcher } from '@/domain/use-cases/fetch-config';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { App } from '@capacitor/app';
+import { useToast } from '@/hooks/use-toast';
+import { getAppVersion, isNativeApp, checkForUpdates, downloadAndInstallUpdate } from '@/services/app-update/app-update-service';
 import SplashScreen from '@/pages/SplashScreen';
 import ProvisioningScreen from '@/pages/ProvisioningScreen';
 import LoginScreen from '@/pages/LoginScreen';
