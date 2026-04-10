@@ -29,6 +29,10 @@ export function DeviceRouter() {
     fetchLanes,
   } = useDevice();
 
+  const { toast } = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const location = useLocation();
   const navigate = useNavigate();
   const locationRef = useRef(location.pathname);
