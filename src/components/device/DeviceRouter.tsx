@@ -73,6 +73,32 @@ export function DeviceRouter() {
     return () => {};
   }, [deviceState, handleConfigVersions, updateConfig, setLastHeartbeat, setLastSync, setPendingCount, fetchLanes]);
 
+  // Auto-check for OTA updates on app launch (native only)
+  useEffect(() => {
+    if (!isNativeApp()) return;
+
+    const checkOTA = async () => {
+      try {
+        const appVersion = await getAppVersion();
+        const update = await checkForUpdates(appVersion.build);
+        if (update) {
+          toast({
+            title: 'Update available',
+            description: `Version ${update.latestVersion} is ready. Tap to install.`,
+          });
+          // Auto-install if mandatory
+          if (update.mandatory) {
+            await downloadAndInstallUpdate(update.downloadUrl);
+          }
+        }
+      } catch (e) {
+        console.warn('OTA update check failed:', e);
+      }
+    };
+
+    checkOTA();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (deviceState === 'loading') {
     return <SplashScreen />;
   }
