@@ -13,7 +13,7 @@ type PendingCountCallback = (count: number) => void;
 
 class SyncWorker {
   private intervalId: number | null = null;
-  private intervalMs = 5000;
+  private intervalMs = 15000;
   private onSynced: SyncCallback | null = null;
   private onPendingCount: PendingCountCallback | null = null;
 
@@ -52,12 +52,11 @@ class SyncWorker {
     }
 
     try {
-      const pending = await db.getPending(50);
+      const count = await db.countPending();
+      this.onPendingCount?.(count);
+      if (count === 0) return;
 
-      if (pending.length === 0) {
-        this.updatePendingCount();
-        return;
-      }
+      const pending = await db.getPending(50);
 
       logger.info(`Syncing ${pending.length} pending reads individually`);
       let syncedCount = 0;
