@@ -1,28 +1,33 @@
 
 
-# Disable Offline Queuing — Show "Device Offline" Instead
+# Performance Optimizations — Safe, No Core Impact
 
-## Current Behavior
-When the device is offline, tag reads are still queued locally in IndexedDB and the sync worker retries uploading them every 5 seconds. The offline banner says "Offline — reads are queued locally."
-
-## Proposed Change
-When offline, **block tag submission entirely** and show a toast saying "Device Offline" so no reads are sent or queued. The sync worker should also skip its cycle when offline.
+All changes are rendering/UI-only. The RFID read → API submit → sync pipeline is completely untouched.
 
 ## Changes
 
-### 1. `src/domain/use-cases/submit-read.ts`
-- At the top of `captureRead`, check `networkStatus.isOnline`
-- If offline, show a destructive toast "Device Offline — tag not submitted" and `return` early (don't queue, don't call API)
+### 1. Memoize DeviceContext value (`src/contexts/DeviceContext.tsx`)
+Wrap the `value` object in `useMemo` to stop unnecessary re-renders of every component using `useDevice()`.
+- **Impact on core features:** None. Same data, same functions, just fewer React re-render cycles.
 
-### 2. `src/workers/sync-worker.ts`
-- At the top of `syncPending()`, add an early return if `!networkStatus.isOnline` (this was previously removed for reliability, but now aligns with the new requirement)
+### 2. Optimize sync worker (`src/workers/sync-worker.ts`)
+- Increase default polling from 5s → 15s
+- Early-exit when `countPending()` is 0
+- **Impact on core features:** None. When reads ARE pending, they still sync immediately via `captureRead` and the worker still drains the queue. Only idle polling is reduced.
 
-### 3. `src/pages/ScanScreen.tsx`
-- Update offline banner text from "Offline — reads are queued locally" to "Device Offline"
+### 3. Fix callback ref in `use-rfid-reader.ts`
+- Line 118: change `onTagDetected?.(fullTag)` → `onTagDetectedRef.current?.(fullTag)`
+- Cap tag history from 100 → 20 items
+- **Impact on core features:** None. The callback fires the same function. History cap only affects the in-memory display list, not what gets submitted to the backend.
 
-| File | Change |
-|------|--------|
-| `src/domain/use-cases/submit-read.ts` | Early return + toast when offline, skip queuing |
-| `src/workers/sync-worker.ts` | Skip sync cycle when offline |
-| `src/pages/ScanScreen.tsx` | Update banner text to "Device Offline" |
+### 4. Reduce ScanScreen re-renders (`src/pages/ScanScreen.tsx`)
+- Destructure only needed values from `useDevice()`
+- **Impact on core features:** None. Pure rendering optimization.
+
+## What remains completely unchanged
+- `src/services/rfid/rfid-service.ts` — tag reading logic
+- `src/services/rfid/mivanta-rfid-plugin.ts` — hardware communication
+- `src/domain/use-cases/submit-read.ts` — API submission
+- `src/data/remote/api-client.ts` — HTTP calls to backend
+- `src/data/local/database.ts` — IndexedDB storage
 
