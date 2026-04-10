@@ -102,15 +102,9 @@ jobs:
           VERSION="${{ env.VERSION }}"
           DOWNLOAD="https://github.com/dit-solutions/impactatms-77ae6a27/releases/download/${VERSION}/ImpactATMS-${VERSION}.apk"
 
-          cat > public/version.json << EOF
-{
-  "version": "${SEMVER}",
-  "build": ${BUILD},
-  "downloadUrl": "${DOWNLOAD}",
-  "releaseNotes": "Build ${BUILD}",
-  "releaseDate": "$(date -u +%Y-%m-%d)"
-}
-EOF
+          printf '{\n  "version": "%s",\n  "build": %s,\n  "downloadUrl": "%s",\n  "releaseNotes": "Build %s",\n  "releaseDate": "%s"\n}\n' \
+            "${SEMVER}" "${BUILD}" "${DOWNLOAD}" "${BUILD}" "$(date -u +%Y-%m-%d)" \
+            > public/version.json
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
