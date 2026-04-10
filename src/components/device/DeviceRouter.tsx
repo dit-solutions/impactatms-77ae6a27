@@ -9,6 +9,8 @@ import { syncWorker } from '@/workers/sync-worker';
 import { configFetcher } from '@/domain/use-cases/fetch-config';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { App } from '@capacitor/app';
+import { useToast } from '@/hooks/use-toast';
+import { getAppVersion, isNativeApp, checkForUpdates, downloadAndInstallUpdate } from '@/services/app-update/app-update-service';
 import SplashScreen from '@/pages/SplashScreen';
 import ProvisioningScreen from '@/pages/ProvisioningScreen';
 import LoginScreen from '@/pages/LoginScreen';
@@ -27,6 +29,7 @@ export function DeviceRouter() {
     fetchLanes,
   } = useDevice();
 
+  const { toast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
   const locationRef = useRef(location.pathname);
@@ -69,6 +72,32 @@ export function DeviceRouter() {
 
     return () => {};
   }, [deviceState, handleConfigVersions, updateConfig, setLastHeartbeat, setLastSync, setPendingCount, fetchLanes]);
+
+  // Auto-check for OTA updates on app launch (native only)
+  useEffect(() => {
+    if (!isNativeApp()) return;
+
+    const checkOTA = async () => {
+      try {
+        const appVersion = await getAppVersion();
+        const update = await checkForUpdates(appVersion.build);
+        if (update) {
+          toast({
+            title: 'Update available',
+            description: `Version ${update.latestVersion} is ready. Tap to install.`,
+          });
+          // Auto-install if mandatory
+          if (update.mandatory) {
+            await downloadAndInstallUpdate(update.downloadUrl);
+          }
+        }
+      } catch (e) {
+        console.warn('OTA update check failed:', e);
+      }
+    };
+
+    checkOTA();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (deviceState === 'loading') {
     return <SplashScreen />;
