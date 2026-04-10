@@ -1,7 +1,7 @@
 /**
  * DeviceContext — manages device provisioning state, user login, lanes, heartbeat, and config.
  */
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { tokenStore } from '@/security/token-store';
 import { apiClient, ApiAuthError } from '@/data/remote/api-client';
 import { heartbeatWorker } from '@/workers/heartbeat-worker';
@@ -205,14 +205,21 @@ export function DeviceProvider({ children }: { children: React.ReactNode }) {
     logger.info(`Config updated — Plaza: ${newConfig?.plaza?.name ?? 'unknown'}`);
   }, []);
 
-  const value: DeviceContextType = {
+  const value: DeviceContextType = useMemo(() => ({
     deviceState, deviceId, config, suspendMessage, isOnline,
     lastHeartbeat, lastSync, pendingCount, currentUser,
     lanes, selectedLane,
     completeProvisioning, completeLogin, logout, resetDevice,
     updateConfig, setLastSync, setPendingCount, setLastHeartbeat,
     setSelectedLane, fetchLanes, handleConfigVersions,
-  };
+  }), [
+    deviceState, deviceId, config, suspendMessage, isOnline,
+    lastHeartbeat, lastSync, pendingCount, currentUser,
+    lanes, selectedLane,
+    completeProvisioning, completeLogin, logout, resetDevice,
+    updateConfig, setLastSync, setPendingCount, setLastHeartbeat,
+    setSelectedLane, fetchLanes, handleConfigVersions,
+  ]);
 
   return (
     <DeviceContext.Provider value={value}>

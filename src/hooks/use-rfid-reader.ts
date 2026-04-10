@@ -44,7 +44,7 @@ export function useRfidReader(
     rfidService.setCallbacks({
       onTagDetected: (tag) => {
         setLastTag(tag);
-        setTagHistory(prev => [tag, ...prev].slice(0, 100));
+        setTagHistory(prev => [tag, ...prev].slice(0, 20));
         onTagDetectedRef.current?.(tag);
       },
       onConnectionChange: setIsConnected,
@@ -104,7 +104,7 @@ export function useRfidReader(
     
     if (fastTag) {
       setLastFastTag(fastTag);
-      setFastTagHistory(prev => [fastTag, ...prev].slice(0, 100));
+      setFastTagHistory(prev => [fastTag, ...prev].slice(0, 20));
       
       const fullTag: RfidTagData = {
         epc: fastTag.epc,
@@ -114,8 +114,8 @@ export function useRfidReader(
         userData: fastTag.userData,
       };
       setLastTag(fullTag);
-      setTagHistory(prev => [fullTag, ...prev].slice(0, 100));
-      onTagDetected?.(fullTag);
+      setTagHistory(prev => [fullTag, ...prev].slice(0, 20));
+      onTagDetectedRef.current?.(fullTag);
       
       const hasAllData = fastTag.tid && fastTag.userData;
       
@@ -137,13 +137,13 @@ export function useRfidReader(
         variant: 'destructive'
       });
     }
-  }, [onTagDetected]);
+  }, []);
 
   const readTagDetails = useCallback(async (): Promise<FastTagData | null> => {
     const fastTag = await rfidService.readTagDetails();
     if (fastTag) {
       setLastFastTag(fastTag);
-      setFastTagHistory(prev => [fastTag, ...prev].slice(0, 100));
+      setFastTagHistory(prev => [fastTag, ...prev].slice(0, 20));
       toast({
         title: 'FASTag Read',
         description: `EPC: ${fastTag.epc.substring(0, 12)}...`
