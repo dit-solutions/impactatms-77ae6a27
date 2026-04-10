@@ -32,9 +32,6 @@ export function DeviceRouter() {
   const { toast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
-
-  const location = useLocation();
-  const navigate = useNavigate();
   const locationRef = useRef(location.pathname);
   locationRef.current = location.pathname;
 
