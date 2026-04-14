@@ -7,10 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   ArrowLeft, Settings as SettingsIcon, Zap, Repeat, Power, PowerOff,
   Bug, Wifi, WifiOff, Activity, Download, RotateCcw,
-  Loader2, Trash2, Clock, LogOut
+  Loader2, Trash2, Clock, LogOut, ChevronDown, ChevronRight, FileText
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -28,6 +29,7 @@ import { apiClient } from '@/data/remote/api-client';
 import { db } from '@/data/local/database';
 import { toast } from '@/hooks/use-toast';
 import type { PendingRead } from '@/data/local/entities';
+import { apiActivityLog, type ApiLogEntry } from '@/utils/api-activity-log';
 
 const DiagnosticsScreen = () => {
   const [searchParams] = useSearchParams();
@@ -41,6 +43,9 @@ const DiagnosticsScreen = () => {
   const [testing, setTesting] = useState(false);
   const [recentReads, setRecentReads] = useState<PendingRead[]>([]);
   const [loadingReads, setLoadingReads] = useState(false);
+  const [apiLog, setApiLog] = useState<ApiLogEntry[]>([]);
+  const [apiLogLoaded, setApiLogLoaded] = useState(false);
+  const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
   const navigate = useNavigate();
 
   const handleConnect = async () => {
@@ -362,6 +367,91 @@ const DiagnosticsScreen = () => {
               </CardContent>
             </Card>
 
+            {/* API Activity Log */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    API Activity
+                  </CardTitle>
+                  {apiLogLoaded && (
+                    <Button variant="ghost" size="sm" onClick={() => { apiActivityLog.clear(); setApiLog([]); }}>
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {!apiLogLoaded ? (
+                  <Button onClick={() => { setApiLog(apiActivityLog.getEntries()); setApiLogLoaded(true); }} variant="outline" className="w-full">
+                    <FileText className="h-4 w-4 mr-2" />
+                    Load API Log
+                  </Button>
+                ) : apiLog.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">No API calls recorded yet.</p>
+                ) : (
+                  <ScrollArea className="h-80">
+                    <div className="space-y-1">
+                      {apiLog.map((entry) => {
+                        const isExpanded = expandedLogId === entry.id;
+                        const statusColor = entry.error
+                          ? 'text-destructive'
+                          : entry.responseStatus && entry.responseStatus >= 400
+                            ? 'text-destructive'
+                            : 'text-emerald-600';
+                        return (
+                          <Collapsible key={entry.id} open={isExpanded} onOpenChange={() => setExpandedLogId(isExpanded ? null : entry.id)}>
+                            <CollapsibleTrigger className="w-full text-left">
+                              <div className="flex items-center gap-2 text-xs py-1.5 px-1 rounded hover:bg-muted/50">
+                                {isExpanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
+                                <Badge variant="outline" className="text-[10px] font-mono shrink-0">{entry.method}</Badge>
+                                <span className="font-mono truncate flex-1">{entry.url.replace(/^https?:\/\/[^/]+/, '')}</span>
+                                <span className={`font-mono shrink-0 ${statusColor}`}>
+                                  {entry.error ? 'ERR' : entry.responseStatus ?? '…'}
+                                </span>
+                                {entry.durationMs !== null && (
+                                  <span className="text-muted-foreground shrink-0">{entry.durationMs}ms</span>
+                                )}
+                              </div>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <div className="ml-5 mb-2 p-2 bg-muted/30 rounded text-[11px] space-y-2">
+                                <p className="text-muted-foreground">{new Date(entry.timestamp).toLocaleString()}</p>
+                                {entry.requestBody && (
+                                  <div>
+                                    <p className="font-semibold text-muted-foreground mb-0.5">Request</p>
+                                    <pre className="whitespace-pre-wrap break-all font-mono bg-background p-1.5 rounded border max-h-32 overflow-auto">
+                                      {tryFormatJson(entry.requestBody)}
+                                    </pre>
+                                  </div>
+                                )}
+                                {entry.responseBody && (
+                                  <div>
+                                    <p className="font-semibold text-muted-foreground mb-0.5">Response</p>
+                                    <pre className="whitespace-pre-wrap break-all font-mono bg-background p-1.5 rounded border max-h-32 overflow-auto">
+                                      {tryFormatJson(entry.responseBody)}
+                                    </pre>
+                                  </div>
+                                )}
+                                {entry.error && (
+                                  <div>
+                                    <p className="font-semibold text-destructive mb-0.5">Error</p>
+                                    <p className="text-destructive">{entry.error}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Danger Zone */}
             <Card className="border-destructive/30">
               <CardHeader className="pb-3">
@@ -395,6 +485,14 @@ function InfoRow({ label, value, highlight }: { label: string; value: string; hi
       <span className={`font-medium ${highlight ? 'text-primary' : ''}`}>{value}</span>
     </div>
   );
+}
+
+function tryFormatJson(s: string): string {
+  try {
+    return JSON.stringify(JSON.parse(s), null, 2);
+  } catch {
+    return s;
+  }
 }
 
 export default DiagnosticsScreen;
