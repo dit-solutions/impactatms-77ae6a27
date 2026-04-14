@@ -75,9 +75,11 @@ class SyncWorker {
 
           await db.updateByLocalReadId(r.localReadId, {
             syncStatus: 'synced',
-            action: response.action as 'ALLOW' | 'REJECT' | undefined,
-            reason: response.reason || response.message,
-            displayMessage: response.display_message,
+            action: response.data.action as 'ALLOW' | 'REJECT' | undefined,
+            reason: response.data.reason || response.data.message,
+            displayMessage: response.data.display_message,
+            httpStatus: response.status,
+            responseBody: response.rawBody,
             syncedAt: Date.now(),
           });
           syncedCount++;

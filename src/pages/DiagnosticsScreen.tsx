@@ -29,7 +29,7 @@ import { apiClient } from '@/data/remote/api-client';
 import { db } from '@/data/local/database';
 import { toast } from '@/hooks/use-toast';
 import type { PendingRead } from '@/data/local/entities';
-import { apiActivityLog, type ApiLogEntry } from '@/utils/api-activity-log';
+
 
 const DiagnosticsScreen = () => {
   const [searchParams] = useSearchParams();
@@ -43,9 +43,7 @@ const DiagnosticsScreen = () => {
   const [testing, setTesting] = useState(false);
   const [recentReads, setRecentReads] = useState<PendingRead[]>([]);
   const [loadingReads, setLoadingReads] = useState(false);
-  const [apiLog, setApiLog] = useState<ApiLogEntry[]>([]);
-  const [apiLogLoaded, setApiLogLoaded] = useState(false);
-  const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
+  const [expandedScanId, setExpandedScanId] = useState<number | null>(null);
   const navigate = useNavigate();
 
   const handleConnect = async () => {
@@ -339,109 +337,59 @@ const DiagnosticsScreen = () => {
                     <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                   </div>
                 ) : (
-                  <ScrollArea className="h-64">
-                    <div className="space-y-2">
-                      {recentReads.map((read, i) => (
-                        <div key={read.id || i} className="flex items-center justify-between text-xs border-b border-border pb-2">
-                          <div className="flex-1 min-w-0">
-                            <p className="font-mono truncate">{read.epc}</p>
-                            <p className="text-muted-foreground">
-                              {new Date(read.createdAt).toLocaleString()}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-1 ml-2 shrink-0">
-                            <Badge variant={read.syncStatus === 'synced' ? 'default' : 'secondary'} className="text-[10px]">
-                              {read.syncStatus}
-                            </Badge>
-                            {read.action && (
-                              <Badge variant={read.action === 'ALLOW' ? 'default' : 'destructive'} className="text-[10px]">
-                                {read.action}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* API Activity Log */}
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    API Activity
-                  </CardTitle>
-                  {apiLogLoaded && (
-                    <Button variant="ghost" size="sm" onClick={() => { apiActivityLog.clear(); setApiLog([]); }}>
-                      <Trash2 className="h-3 w-3 mr-1" />
-                      Clear
-                    </Button>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                {!apiLogLoaded ? (
-                  <Button onClick={() => { setApiLog(apiActivityLog.getEntries()); setApiLogLoaded(true); }} variant="outline" className="w-full">
-                    <FileText className="h-4 w-4 mr-2" />
-                    Load API Log
-                  </Button>
-                ) : apiLog.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">No API calls recorded yet.</p>
-                ) : (
                   <ScrollArea className="h-80">
                     <div className="space-y-1">
-                      {apiLog.map((entry) => {
-                        const isExpanded = expandedLogId === entry.id;
-                        const statusColor = entry.error
-                          ? 'text-destructive'
-                          : entry.responseStatus && entry.responseStatus >= 400
-                            ? 'text-destructive'
-                            : 'text-emerald-600';
+                      {recentReads.map((read, i) => {
+                        const isExpanded = expandedScanId === (read.id || i);
+                        const statusColor = !read.httpStatus
+                          ? 'bg-muted text-muted-foreground'
+                          : read.httpStatus >= 200 && read.httpStatus < 300
+                            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                            : read.httpStatus === 422
+                              ? 'bg-destructive/15 text-destructive'
+                              : 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400';
                         return (
-                          <Collapsible key={entry.id} open={isExpanded} onOpenChange={() => setExpandedLogId(isExpanded ? null : entry.id)}>
+                          <Collapsible
+                            key={read.id || i}
+                            open={isExpanded}
+                            onOpenChange={() => setExpandedScanId(isExpanded ? null : (read.id || i))}
+                          >
                             <CollapsibleTrigger className="w-full text-left">
-                              <div className="flex items-center gap-2 text-xs py-1.5 px-1 rounded hover:bg-muted/50">
+                              <div className="flex items-center gap-2 text-xs py-2 px-1 rounded hover:bg-muted/50">
                                 {isExpanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
-                                <Badge variant="outline" className="text-[10px] font-mono shrink-0">{entry.method}</Badge>
-                                <span className="font-mono truncate flex-1">{entry.url.replace(/^https?:\/\/[^/]+/, '')}</span>
-                                <span className={`font-mono shrink-0 ${statusColor}`}>
-                                  {entry.error ? 'ERR' : entry.responseStatus ?? '…'}
-                                </span>
-                                {entry.durationMs !== null && (
-                                  <span className="text-muted-foreground shrink-0">{entry.durationMs}ms</span>
-                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-mono truncate">{read.epc}</p>
+                                  <p className="text-muted-foreground">
+                                    {new Date(read.createdAt).toLocaleString()}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-1 ml-2 shrink-0">
+                                  {read.httpStatus ? (
+                                    <Badge variant="outline" className={`text-[10px] ${statusColor}`}>
+                                      {read.httpStatus}
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="secondary" className="text-[10px]">
+                                      {read.syncStatus}
+                                    </Badge>
+                                  )}
+                                  {read.action && (
+                                    <Badge variant={read.action === 'ALLOW' ? 'default' : 'destructive'} className="text-[10px]">
+                                      {read.action}
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
                             </CollapsibleTrigger>
                             <CollapsibleContent>
-                              <div className="ml-5 mb-2 p-2 bg-muted/30 rounded text-[11px] space-y-2">
-                                <p className="text-muted-foreground">{new Date(entry.timestamp).toLocaleString()}</p>
-                                {entry.requestBody && (
-                                  <div>
-                                    <p className="font-semibold text-muted-foreground mb-0.5">Request</p>
-                                    <pre className="whitespace-pre-wrap break-all font-mono bg-background p-1.5 rounded border max-h-32 overflow-auto">
-                                      {tryFormatJson(entry.requestBody)}
-                                    </pre>
-                                  </div>
-                                )}
-                                {entry.responseBody && (
-                                  <div>
-                                    <p className="font-semibold text-muted-foreground mb-0.5">Response</p>
-                                    <pre className="whitespace-pre-wrap break-all font-mono bg-background p-1.5 rounded border max-h-32 overflow-auto">
-                                      {tryFormatJson(entry.responseBody)}
-                                    </pre>
-                                  </div>
-                                )}
-                                {entry.error && (
-                                  <div>
-                                    <p className="font-semibold text-destructive mb-0.5">Error</p>
-                                    <p className="text-destructive">{entry.error}</p>
-                                  </div>
-                                )}
-                              </div>
+                              {read.responseBody && (
+                                <div className="ml-5 mb-2 p-2 bg-muted/30 rounded text-[11px]">
+                                  <p className="font-semibold text-muted-foreground mb-0.5">Response</p>
+                                  <pre className="whitespace-pre-wrap break-all font-mono bg-background p-1.5 rounded border max-h-32 overflow-auto">
+                                    {tryFormatJson(read.responseBody)}
+                                  </pre>
+                                </div>
+                              )}
                             </CollapsibleContent>
                           </Collapsible>
                         );
@@ -451,6 +399,8 @@ const DiagnosticsScreen = () => {
                 )}
               </CardContent>
             </Card>
+
+
 
             {/* Danger Zone */}
             <Card className="border-destructive/30">

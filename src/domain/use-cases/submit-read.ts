@@ -52,7 +52,7 @@ export function useReadCapture() {
 
     // Always attempt immediate upload
     try {
-      const response = await apiClient.submitRfidRead({
+      const { status: httpStatus, data: response, rawBody } = await apiClient.submitRfidRead({
         tag_id: read.epc,
         tid: read.tid || '',
         user_data: read.userData || '',
@@ -67,6 +67,8 @@ export function useReadCapture() {
           reason: response.reason || response.message,
           displayMessage: response.display_message,
           syncedAt: Date.now(),
+          httpStatus,
+          responseBody: rawBody,
         });
 
         setLastResult({
@@ -80,6 +82,8 @@ export function useReadCapture() {
         await db.updateByLocalReadId(localReadId, {
           syncStatus: 'synced',
           syncedAt: Date.now(),
+          httpStatus,
+          responseBody: rawBody,
         });
         logger.info(`Read submitted, no action in response`);
       }
@@ -87,8 +91,15 @@ export function useReadCapture() {
       if (err instanceof ApiAuthError) {
         logger.error('Auth failed during read submission');
       } else {
-        logger.warn(`Read upload failed, staying in queue: ${err}`);
-        // Nudge sync worker to retry soon
+        const apiErr = err as any;
+        const httpStatus = apiErr?.status || undefined;
+        const responseBody = apiErr?.body || String(err);
+        await db.updateByLocalReadId(localReadId, {
+          syncStatus: 'failed',
+          httpStatus,
+          responseBody,
+        });
+        logger.warn(`Read upload failed: status=${httpStatus} ${err}`);
         syncWorker.syncPending();
       }
     }
