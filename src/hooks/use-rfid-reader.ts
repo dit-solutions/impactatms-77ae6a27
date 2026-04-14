@@ -103,9 +103,6 @@ export function useRfidReader(
     const fastTag = await rfidService.readTagDetails();
     
     if (fastTag) {
-      setLastFastTag(fastTag);
-      setFastTagHistory(prev => [fastTag, ...prev].slice(0, 2));
-      
       const fullTag: RfidTagData = {
         epc: fastTag.epc,
         rssi: fastTag.rssi,
@@ -113,12 +110,14 @@ export function useRfidReader(
         tid: fastTag.tid,
         userData: fastTag.userData,
       };
+
+      // Update UI state first, then fire callback
+      setLastFastTag(fastTag);
+      setFastTagHistory(prev => [fastTag, ...prev].slice(0, 2));
       setLastTag(fullTag);
       setTagHistory(prev => [fullTag, ...prev].slice(0, 2));
-      onTagDetectedRef.current?.(fullTag);
       
       const hasAllData = fastTag.tid && fastTag.userData;
-      
       if (hasAllData) {
         toast({
           title: 'FASTag Complete',
@@ -130,6 +129,9 @@ export function useRfidReader(
           description: `EPC: ${fastTag.epc.substring(0, 12)}...`
         });
       }
+
+      // Callback last — captureRead is now non-blocking
+      onTagDetectedRef.current?.(fullTag);
     } else {
       toast({
         title: 'No Tag',
