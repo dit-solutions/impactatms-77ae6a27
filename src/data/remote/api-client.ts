@@ -5,7 +5,6 @@
 
 import { tokenStore } from '@/security/token-store';
 import { logger } from '@/utils/logger';
-import { apiActivityLog } from '@/utils/api-activity-log';
 import type {
   ProvisionRequest,
   ProvisionResponse,
@@ -79,7 +78,7 @@ class ApiClient {
     const method = options.method || 'GET';
     logger.info(`API ${method} ${url}`);
 
-    const logEntry = apiActivityLog.start(method, url, options.body as string | null);
+    
 
     let response: Response;
     try {
@@ -87,7 +86,6 @@ class ApiClient {
     } catch (networkErr) {
       const errMsg = `Network error calling ${url} — possible CORS issue: ${String(networkErr)}`;
       logger.error(errMsg);
-      apiActivityLog.fail(logEntry, String(networkErr));
       throw new ApiError(errMsg, 0, String(networkErr));
     }
 
@@ -97,17 +95,14 @@ class ApiClient {
 
     if (response.status === 401) {
       logger.error(`API auth failed — 401 at ${url}`);
-      apiActivityLog.end(logEntry, 401, rawBody);
       throw new ApiAuthError('Device authentication failed');
     }
 
     if (!response.ok) {
       logger.error(`API error ${response.status} at ${url}: ${rawBody}`);
-      apiActivityLog.end(logEntry, response.status, rawBody);
       throw new ApiError(`API error ${response.status} at ${url}`, response.status, rawBody);
     }
 
-    apiActivityLog.end(logEntry, response.status, rawBody);
     return response.json();
   }
 
@@ -157,11 +152,46 @@ class ApiClient {
     );
   }
 
-  async submitRfidRead(req: RfidSubmitRequest): Promise<RfidSubmitResponse> {
-    return this.request<RfidSubmitResponse>(
-      '/api/v1/handheld/rfid',
-      { method: 'POST', body: JSON.stringify(req) }
-    );
+  async submitRfidRead(req: RfidSubmitRequest): Promise<{ status: number; data: RfidSubmitResponse; rawBody: string }> {
+    if (!this.baseUrl) {
+      throw new Error('API base URL not set. Device not provisioned.');
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+
+    const token = await tokenStore.getToken();
+    if (!token) throw new ApiAuthError('Device token missing');
+    headers['Device'] = `HHM ${token}`;
+
+    const userToken = await tokenStore.getUserToken();
+    if (userToken) headers['Authorization'] = `Bearer ${userToken}`;
+
+    const url = `${this.baseUrl}/api/v1/handheld/rfid`;
+    const body = JSON.stringify(req);
+    logger.info(`API POST ${url}`);
+
+    let response: Response;
+    try {
+      response = await fetch(url, { method: 'POST', headers, body });
+    } catch (networkErr) {
+      throw new ApiError(`Network error calling ${url}`, 0, String(networkErr));
+    }
+
+    const rawBody = await response.clone().text().catch(() => '');
+
+    if (response.status === 401) {
+      throw new ApiAuthError('Device authentication failed');
+    }
+
+    if (!response.ok) {
+      throw new ApiError(`API error ${response.status} at ${url}`, response.status, rawBody);
+    }
+
+    const data = await response.json();
+    return { status: response.status, data, rawBody };
   }
 
   async login(req: LoginRequest): Promise<LoginResponse> {

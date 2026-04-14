@@ -27,4 +27,8 @@ export interface PendingRead {
   createdAt: number;
   /** When it was last synced */
   syncedAt?: number;
+  /** HTTP status code from API response */
+  httpStatus?: number;
+  /** Raw response body from API */
+  responseBody?: string;
 }
