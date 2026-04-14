@@ -11,7 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import {
   ArrowLeft, Settings as SettingsIcon, Zap, Repeat, Power, PowerOff,
   Bug, Wifi, WifiOff, Activity, Download, RotateCcw,
-  Loader2, Trash2, Clock, LogOut, ChevronDown, ChevronRight, FileText
+  Loader2, Trash2, Clock, LogOut, ChevronDown, ChevronRight
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
