@@ -1,32 +1,33 @@
 
 
-# Fix YAML Syntax Error in CI Workflow
+# Add API Activity Log to Diagnostics
 
-## Problem
-Line 106 onward has zero indentation for the heredoc JSON content. YAML requires all lines inside a `run: |` block to maintain consistent indentation (at least matching the first content line, which uses 10 spaces). The `{` at column 0 breaks YAML parsing.
+Show full request/response details for every API call made by the app — tag submissions, heartbeats, config fetches, etc.
 
-## Fix
+## Approach
 
-**File:** `.github/workflows/android-build.yml` (lines 105-113)
+Create an in-memory API activity log that the `ApiClient` populates on every request, then display it in a new "API Log" section on the Debug tab.
 
-Replace the unindented heredoc block with a properly indented approach using `printf` or by re-indenting the heredoc content to match the YAML block:
+## Changes
 
-```yaml
-      - name: Commit version manifest
-        if: success()
-        run: |
-          SEMVER="${{ env.SEMVER }}"
-          BUILD="${{ env.BUILD }}"
-          VERSION="${{ env.VERSION }}"
-          DOWNLOAD="https://github.com/dit-solutions/impactatms-77ae6a27/releases/download/${VERSION}/ImpactATMS-${VERSION}.apk"
+### 1. Create API Activity Store (`src/utils/api-activity-log.ts`)
+- A simple singleton that stores the last 30 API calls in memory (not persisted)
+- Each entry captures: timestamp, method, URL, request body, response status, response body, duration (ms), and error if any
+- Exposes `getEntries()` and `clear()`
 
-          printf '{\n  "version": "%s",\n  "build": %s,\n  "downloadUrl": "%s",\n  "releaseNotes": "Build %s",\n  "releaseDate": "%s"\n}\n' \
-            "${SEMVER}" "${BUILD}" "${DOWNLOAD}" "${BUILD}" "$(date -u +%Y-%m-%d)" \
-            > public/version.json
-```
+### 2. Instrument `ApiClient.request()` (`src/data/remote/api-client.ts`)
+- Before `fetch`, record the request details (method, URL, body)
+- After `fetch`, capture response status and clone + read the response body (up to 2KB)
+- On error, capture the error message
+- Push each entry to the activity log
 
-This uses `printf` instead of a heredoc, avoiding all YAML/heredoc indentation conflicts while producing clean, unindented JSON output.
+### 3. Add API Log viewer to Debug tab (`src/pages/DiagnosticsScreen.tsx`)
+- New card "API Activity" in the Debug tab with a "Load API Log" button (same lazy pattern as scanned tags)
+- Each entry shows: timestamp, method, URL, status code (color-coded), duration
+- Tapping an entry expands to show request body and response body (JSON-formatted)
+- "Clear" button to reset the log
 
-## Single file change
-- `.github/workflows/android-build.yml` — replace lines 105-113
+## What stays unchanged
+- No changes to RFID reading, tag submission logic, or sync worker behavior
+- The logging is read-only observation of existing API calls
 
