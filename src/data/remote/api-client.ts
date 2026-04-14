@@ -5,6 +5,7 @@
 
 import { tokenStore } from '@/security/token-store';
 import { logger } from '@/utils/logger';
+import { apiActivityLog } from '@/utils/api-activity-log';
 import type {
   ProvisionRequest,
   ProvisionResponse,
@@ -75,7 +76,10 @@ class ApiClient {
     }
 
     const url = `${this.baseUrl}${path}`;
-    logger.info(`API ${options.method || 'GET'} ${url}`);
+    const method = options.method || 'GET';
+    logger.info(`API ${method} ${url}`);
+
+    const logEntry = apiActivityLog.start(method, url, options.body as string | null);
 
     let response: Response;
     try {
@@ -83,20 +87,27 @@ class ApiClient {
     } catch (networkErr) {
       const errMsg = `Network error calling ${url} — possible CORS issue: ${String(networkErr)}`;
       logger.error(errMsg);
+      apiActivityLog.fail(logEntry, String(networkErr));
       throw new ApiError(errMsg, 0, String(networkErr));
     }
 
+    // Read body for logging (clone so we can still return it)
+    const cloned = response.clone();
+    const rawBody = await cloned.text().catch(() => '');
+
     if (response.status === 401) {
       logger.error(`API auth failed — 401 at ${url}`);
+      apiActivityLog.end(logEntry, 401, rawBody);
       throw new ApiAuthError('Device authentication failed');
     }
 
     if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      logger.error(`API error ${response.status} at ${url}: ${body}`);
-      throw new ApiError(`API error ${response.status} at ${url}`, response.status, body);
+      logger.error(`API error ${response.status} at ${url}: ${rawBody}`);
+      apiActivityLog.end(logEntry, response.status, rawBody);
+      throw new ApiError(`API error ${response.status} at ${url}`, response.status, rawBody);
     }
 
+    apiActivityLog.end(logEntry, response.status, rawBody);
     return response.json();
   }
 
