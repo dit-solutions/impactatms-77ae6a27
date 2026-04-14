@@ -487,4 +487,12 @@ function InfoRow({ label, value, highlight }: { label: string; value: string; hi
   );
 }
 
+function tryFormatJson(s: string): string {
+  try {
+    return JSON.stringify(JSON.parse(s), null, 2);
+  } catch {
+    return s;
+  }
+}
+
 export default DiagnosticsScreen;
